@@ -6,9 +6,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ── FLAGS_UPDATE from content script ────────────────────────────────────
   if (msg.type === 'FLAGS_UPDATE' && sender.tab) {
     tabState[sender.tab.id] = { flags: msg.flags, overrides: msg.overrides }
-    // Push to popup if it's open (no-op if closed)
-    chrome.runtime.sendMessage({ type: 'FLAGS_UPDATE', flags: msg.flags, overrides: msg.overrides })
-      .catch(() => {})
+    // Only push to popup if this is the currently active tab
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id === sender.tab.id) {
+        chrome.runtime.sendMessage({ type: 'FLAGS_UPDATE', flags: msg.flags, overrides: msg.overrides })
+          .catch(() => {})
+      }
+    })
     return
   }
 
