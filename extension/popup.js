@@ -64,7 +64,7 @@ function render() {
 
   for (const key of keys.sort()) {
     const flag = flags[key]
-    const hasOverride = key in overrides
+    const hasOverride = key in overrides && JSON.stringify(overrides[key]) !== JSON.stringify(flag.value)
     const displayValue = hasOverride ? overrides[key] : flag.value
     const type = inferType(flag.value)
     const isExpanded = expandedKey === key
@@ -132,8 +132,13 @@ function render() {
         trueBtn.textContent = 'true'
         trueBtn.addEventListener('click', (e) => {
           e.stopPropagation()
-          send({ type: 'SET_OVERRIDE', key, value: true })
-          state.overrides[key] = true
+          if (flag.value === true) {
+            send({ type: 'CLEAR_OVERRIDE', key })
+            delete state.overrides[key]
+          } else {
+            send({ type: 'SET_OVERRIDE', key, value: true })
+            state.overrides[key] = true
+          }
           render()
         })
 
@@ -142,8 +147,13 @@ function render() {
         falseBtn.textContent = 'false'
         falseBtn.addEventListener('click', (e) => {
           e.stopPropagation()
-          send({ type: 'SET_OVERRIDE', key, value: false })
-          state.overrides[key] = false
+          if (flag.value === false) {
+            send({ type: 'CLEAR_OVERRIDE', key })
+            delete state.overrides[key]
+          } else {
+            send({ type: 'SET_OVERRIDE', key, value: false })
+            state.overrides[key] = false
+          }
           render()
         })
 
@@ -153,7 +163,7 @@ function render() {
         if (hasOverride) {
           const restore = document.createElement('button')
           restore.className = 'editor-restore'
-          restore.textContent = 'restore actual value'
+          restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
             send({ type: 'CLEAR_OVERRIDE', key })
@@ -186,8 +196,13 @@ function render() {
             input.style.borderColor = '#dc2626'
             return
           }
-          send({ type: 'SET_OVERRIDE', key, value: parsed })
-          state.overrides[key] = parsed
+          if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
+            send({ type: 'CLEAR_OVERRIDE', key })
+            delete state.overrides[key]
+          } else {
+            send({ type: 'SET_OVERRIDE', key, value: parsed })
+            state.overrides[key] = parsed
+          }
           render()
         }
 
@@ -209,7 +224,7 @@ function render() {
         if (hasOverride) {
           const restore = document.createElement('button')
           restore.className = 'editor-restore'
-          restore.textContent = 'restore actual value'
+          restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
             send({ type: 'CLEAR_OVERRIDE', key })
