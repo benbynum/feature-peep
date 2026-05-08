@@ -1,29 +1,21 @@
-// Per-tab flag state — lost if service worker is terminated (MV3 limitation, acceptable for MVP)
 const tabState = {}
 
-// Track focused window + its active tab — onActivated fires across all windows so we must
-// gate updates on whether the tab's window is the focused one
 let activeTabId = null
 let activeWindowId = null
+let focusSeq = 0  // Discard stale onFocusChanged callbacks when windows switch rapidly
 
 chrome.windows.onFocusChanged.addListener((windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) return
   activeWindowId = windowId
+  const seq = ++focusSeq
   chrome.tabs.query({ active: true, windowId }, (tabs) => {
+    if (seq !== focusSeq) return  // A newer focus change came in — discard
     if (tabs[0]) activeTabId = tabs[0].id
   })
 })
 
 chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
   if (windowId === activeWindowId) activeTabId = tabId
-})
-
-// Initialize on startup in case the service worker starts mid-session
-chrome.windows.getLastFocused({ populate: true }, (win) => {
-  if (!win) return
-  activeWindowId = win.id
-  const active = win.tabs?.find(t => t.active)
-  if (active) activeTabId = active.id
 })
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -38,11 +30,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return
   }
 
-  // GET_FLAGS from popup
+  // GET_FLAGS from popup — always query fresh so popup open authoritatively resets activeTabId
   if (msg.type === 'GET_FLAGS') {
-    const state = tabState[activeTabId] || { flags: {}, overrides: {} }
-    sendResponse(state)
-    return
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        activeTabId = tabs[0].id
+        activeWindowId = tabs[0].windowId
+      }
+      sendResponse(tabState[activeTabId] || { flags: {}, overrides: {} })
+    })
+    return true  // Keep channel open for async sendResponse
   }
 
   // Override commands from popup
