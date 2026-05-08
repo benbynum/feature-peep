@@ -117,7 +117,8 @@ function render() {
 
       const label = document.createElement('div')
       label.className = 'editor-label'
-      label.textContent = hasOverride ? 'Override active' : 'Set override'
+      label.textContent = hasOverride ? 'Override active' : 'Override inactive'
+      if (!hasOverride) label.style.opacity = '0.5'
       editor.appendChild(label)
 
       if (type === 'boolean') {
@@ -152,12 +153,11 @@ function render() {
         if (hasOverride) {
           const restore = document.createElement('button')
           restore.className = 'editor-restore'
-          restore.textContent = `restore (${formatValue(flag.value, type)})`
+          restore.textContent = 'restore actual value'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
             send({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
-            expandedKey = null
             render()
           })
           toggleRow.appendChild(restore)
@@ -209,12 +209,11 @@ function render() {
         if (hasOverride) {
           const restore = document.createElement('button')
           restore.className = 'editor-restore'
-          restore.textContent = `restore (${formatValue(flag.value, type)})`
+          restore.textContent = 'restore actual value'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
             send({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
-            expandedKey = null
             render()
           })
           editor.appendChild(restore)
