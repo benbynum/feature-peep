@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Plans and requirements — track only latest versions
+plans/PLAN-v*.md
+!plans/*-latest.md
+requirements/REQ-v*.md
+!requirements/*-latest.md
