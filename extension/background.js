@@ -1,16 +1,29 @@
 // Per-tab flag state — lost if service worker is terminated (MV3 limitation, acceptable for MVP)
 const tabState = {}
 
-// Track active tab synchronously — avoids unreliable currentWindow queries from a service worker
+// Track focused window + its active tab — onActivated fires across all windows so we must
+// gate updates on whether the tab's window is the focused one
 let activeTabId = null
+let activeWindowId = null
 
-chrome.tabs.onActivated.addListener(({ tabId }) => {
-  activeTabId = tabId
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return
+  activeWindowId = windowId
+  chrome.tabs.query({ active: true, windowId }, (tabs) => {
+    if (tabs[0]) activeTabId = tabs[0].id
+  })
+})
+
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
+  if (windowId === activeWindowId) activeTabId = tabId
 })
 
 // Initialize on startup in case the service worker starts mid-session
-chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-  if (tabs[0]) activeTabId = tabs[0].id
+chrome.windows.getLastFocused({ populate: true }, (win) => {
+  if (!win) return
+  activeWindowId = win.id
+  const active = win.tabs?.find(t => t.active)
+  if (active) activeTabId = active.id
 })
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
