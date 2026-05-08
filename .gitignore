@@ -1,9 +1,10 @@
 # macOS
 .DS_Store
 
-# Source media — keep only converted MP4
+# Source media — keep only converted MP4 and HQ GIF
 *.mov
 *.gif
+!flagtap-demo-hq.gif
 launchdarkly.png
 
 # Plans and requirements — track only latest versions

@@ -2,7 +2,7 @@
 
 Inspect and override feature flags without touching your app or environment config.
 
-<video src="https://github.com/user-attachments/assets/3b3e0f11-28c7-4d9a-818c-fd8876c4f590" autoplay loop muted playsinline></video>
+![Flagtap demo](flagtap-demo-hq.gif)
 
 ## Why it exists
 
