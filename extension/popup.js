@@ -133,7 +133,6 @@ function render() {
           e.stopPropagation()
           send({ type: 'SET_OVERRIDE', key, value: true })
           state.overrides[key] = true
-          expandedKey = null
           render()
         })
 
@@ -144,7 +143,6 @@ function render() {
           e.stopPropagation()
           send({ type: 'SET_OVERRIDE', key, value: false })
           state.overrides[key] = false
-          expandedKey = null
           render()
         })
 
@@ -190,7 +188,6 @@ function render() {
           }
           send({ type: 'SET_OVERRIDE', key, value: parsed })
           state.overrides[key] = parsed
-          expandedKey = null
           render()
         }
 
