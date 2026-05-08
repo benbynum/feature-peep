@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Feature Flag DevTools",
+  "name": "Flagtap",
   "version": "0.1.0",
-  "description": "Inspect and override LaunchDarkly feature flags on any page",
+  "description": "Inspect and override feature flags on any page. Works with LaunchDarkly and OpenFeature.",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Feature Flag DevTools"
+    "default_title": "Flagtap"
   },
   "background": {
     "service_worker": "background.js"
