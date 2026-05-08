@@ -1,6 +1,20 @@
 let state = { flags: {}, overrides: {} }
 let expandedKey = null
 
+const PROVIDERS = {
+  launchdarkly: {
+    name: 'LaunchDarkly',
+    svgPath: 'M1571 3174 c-12 -15 -21 -35 -21 -44 0 -18 97 -156 523 -745 124 -170 223 -311 222 -313 -2 -2 -293 116 -648 262 -355 146 -657 266 -671 266 -56 0 -88 -78 -48 -118 9 -9 270 -167 580 -351 309 -184 561 -335 559 -337 -2 -2 -199 -15 -438 -29 -238 -14 -544 -32 -679 -40 -135 -8 -380 -21 -545 -30 -353 -19 -360 -20 -386 -46 -24 -24 -25 -73 0 -98 23 -23 40 -25 426 -46 154 -9 390 -22 525 -30 135 -8 328 -19 430 -25 382 -22 663 -40 666 -42 1 -2 -253 -155 -565 -341 -312 -185 -572 -342 -579 -349 -20 -20 -14 -72 11 -96 40 -38 -47 -69 817 288 283 117 523 216 533 221 9 6 17 8 17 5 0 -2 -165 -233 -367 -513 -202 -279 -371 -520 -377 -535 -15 -39 18 -82 66 -86 34 -3 52 14 801 769 548 553 768 780 772 801 16 70 30 55 -773 860 -701 704 -768 768 -798 768 -23 0 -38 -8 -53 -26z',
+    svgTransform: 'translate(0,320) scale(0.1,-0.1)',
+    viewBox: '0 0 320 320',
+  }
+}
+
+function providerBadgeHTML(provider) {
+  const p = PROVIDERS[provider]
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">detected</span>`
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function inferType(value) {
@@ -49,6 +63,9 @@ function render() {
 
   emptyEl.classList.add('hidden')
   flagsEl.classList.remove('hidden')
+  if (badgeEl.classList.contains('hidden')) {
+    badgeEl.innerHTML = providerBadgeHTML('launchdarkly')
+  }
   badgeEl.classList.remove('hidden')
 
   if (overrideCount > 0) {

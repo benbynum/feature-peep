@@ -56,13 +56,31 @@ header {
 }
 
 .badge {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 12px;
   background: #405bff;
   color: #fff;
+}
+
+.provider-logo {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.provider-name {
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.provider-detected {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 /* ── States ─────────────────────────────────────────────────── */

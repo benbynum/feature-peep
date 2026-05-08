@@ -1,6 +1,11 @@
 # macOS
 .DS_Store
 
+# Source media — keep only converted MP4
+*.mov
+*.gif
+launchdarkly.png
+
 # Plans and requirements — track only latest versions
 plans/PLAN-v*.md
 !plans/*-latest.md
