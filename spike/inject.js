@@ -21,17 +21,26 @@
           try {
             const raw = JSON.parse(e.data);
 
-            // If this looks like an LD put payload, mutate one flag for testing
-            if (raw && raw.flags) {
-              console.log('[LD-SPIKE] LD put detected. Flags:', Object.keys(raw.flags));
+            // LD client SDK put format: flat object of flag objects, each with a `version` and `value`
+            // e.g. {"my-flag": {"version":1,"flagVersion":1,"value":true,"variation":0,...}}
+            const isLDPut = type === 'put' &&
+              raw !== null &&
+              typeof raw === 'object' &&
+              !Array.isArray(raw) &&
+              Object.keys(raw).length > 0 &&
+              typeof Object.values(raw)[0] === 'object' &&
+              'version' in Object.values(raw)[0];
+
+            if (isLDPut) {
+              console.log('[LD-SPIKE] LD put detected. Flags:', Object.keys(raw));
 
               // --- OVERRIDE INJECTION TEST ---
               // Find the first boolean flag and flip it
-              for (const key of Object.keys(raw.flags)) {
-                const flag = raw.flags[key];
+              for (const key of Object.keys(raw)) {
+                const flag = raw[key];
                 if (typeof flag.value === 'boolean') {
                   const original = flag.value;
-                  raw.flags[key] = { ...flag, value: !original };
+                  raw[key] = { ...flag, value: !original };
                   console.log('[LD-SPIKE] Flipped flag:', key, original, '->', !original);
                   break;
                 }
@@ -44,8 +53,8 @@
               return;
             }
 
-            // patch event
-            if (raw && raw.data && raw.data.value !== undefined) {
+            // LD patch format: {"path":"/flags/key","data":{...}} or just {"version":...,"value":...}
+            if (type === 'patch' && raw !== null && typeof raw === 'object') {
               console.log('[LD-SPIKE] LD patch detected:', raw);
             }
           } catch (_) {
