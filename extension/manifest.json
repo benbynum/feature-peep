@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Feature Flag DevTools",
+  "version": "0.1.0",
+  "description": "Inspect and override LaunchDarkly feature flags on any page",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Feature Flag DevTools"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "permissions": ["storage", "tabs"],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feature Flag DevTools</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="header-left">
+        <span class="logo">⚑</span>
+        <span class="title">Feature Flag DevTools</span>
+      </div>
+      <div class="header-right">
+        <span id="provider-badge" class="badge hidden">LaunchDarkly</span>
+      </div>
+    </header>
+
+    <div id="state-empty" class="state-message">
+      <p>No LaunchDarkly flags detected on this page.</p>
+      <p class="hint">Flags appear once the SDK initializes and streams.</p>
+    </div>
+
+    <div id="state-flags" class="hidden">
+      <div class="toolbar">
+        <span id="override-count" class="override-count hidden"></span>
+        <button id="clear-all-btn" class="clear-all hidden">Clear all overrides</button>
+      </div>
+      <ul id="flag-list"></ul>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
