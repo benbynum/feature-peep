@@ -232,6 +232,18 @@ function render() {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
+const retryBtn = document.getElementById('retry-btn')
+retryBtn.addEventListener('click', () => {
+  retryBtn.classList.add('spinning')
+  chrome.runtime.sendMessage({ type: 'GET_FLAGS' }, (response) => {
+    retryBtn.classList.remove('spinning')
+    if (response) {
+      state = response
+      render()
+    }
+  })
+})
+
 document.getElementById('clear-all-btn').addEventListener('click', () => {
   send({ type: 'CLEAR_ALL_OVERRIDES' })
   state.overrides = {}
