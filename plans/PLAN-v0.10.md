@@ -66,6 +66,10 @@ Gap: no tool does passive zero-install detection + overrides across multiple pro
 
 ## MVP Scope
 
+**Specifically targets:** LaunchDarkly native JS client SDK, SSE streaming mode only.
+
+SSE streaming is the default and most common LD client configuration, but it can be disabled. Apps that have disabled streaming (polling-only mode) are out of scope for MVP — we haven't validated interception for that case and it requires a different mechanism (fetch/XHR interception). Note this in user-facing docs when it ships.
+
 **In scope:**
 - Content script injects page-world script via `<script>` tag
 - `window.EventSource` patch intercepts LD SSE stream
@@ -78,7 +82,9 @@ Gap: no tool does passive zero-install detection + overrides across multiple pro
 - Payload-first LD detection (works through proxies)
 
 **Out of scope for MVP:**
-- OpenFeature or any provider other than LaunchDarkly
+- OpenFeature or any provider other than LaunchDarkly native SDK
+- LaunchDarkly used via OpenFeature adapter (different code path)
+- Apps with LD streaming disabled (polling-only mode)
 - Firefox
 - Flag evaluation history
 - Evaluation reason / metadata
