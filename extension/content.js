@@ -1,8 +1,6 @@
-// Inject inject.js into the page world so it can access window.EventSource
-const script = document.createElement('script')
-script.src = chrome.runtime.getURL('inject.js')
-script.onload = () => script.remove()
-;(document.head || document.documentElement).appendChild(script)
+// inject.js runs in the MAIN world (see manifest) — no script tag injection needed.
+// This file runs in the isolated content script world and bridges
+// window.postMessage (from inject.js) ↔ chrome.runtime (background/popup).
 
 // ── Page world → extension ────────────────────────────────────────────────
 
