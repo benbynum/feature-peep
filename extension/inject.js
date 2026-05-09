@@ -1,5 +1,6 @@
 (function () {
-  const log = (...a) => console.log('[Flagtap]', ...a)
+  // Format-specifier-aware logger — console substitutes %s/%d/%o correctly
+  const log = (fmt, ...args) => console.log(`[Flagtap] ${fmt}`, ...args)
 
   let currentFlags = {}
   let overrides = {}
@@ -82,27 +83,26 @@
     const modified = applyOverrides(currentFlags)
     const fakeEvent = new MessageEvent('put', { data: JSON.stringify(modified) })
     for (const listener of sdkPutListeners) {
-      try { listener(fakeEvent) } catch (err) { log('fireFakePut listener error:', err) }
+      try { listener(fakeEvent) } catch (err) { log('fireFakePut listener error: %o', err) }
     }
     notifyExtension(currentFlags, overrides)
   }
 
   // ─── Timer interceptors (force-poll on override) ──────────────────────────
   //
-  // Intercepts setInterval AND recursive setTimeout so we can trigger the
-  // SDK's polling callback immediately when an override is set, rather than
-  // waiting for the next natural poll cycle (usually 30 s).
+  // Captures setInterval and recursive setTimeout so we can trigger the SDK's
+  // polling callback immediately on override changes.
   //
-  // For setTimeout: we cancel the pending timer and call the fn immediately;
-  // the fn reschedules its own next poll as normal.
+  // IMPORTANT: triggerImmediatePoll snapshots capturedPollers before iterating.
+  // Without a snapshot, V8's Map iterator picks up entries added during the
+  // loop (the fn() schedules its next timeout), causing an infinite loop.
 
   const OriginalSetInterval = window.setInterval
   const OriginalClearInterval = window.clearInterval
   const OriginalSetTimeout = window.setTimeout
   const OriginalClearTimeout = window.clearTimeout
 
-  // key → { call, type, nativeId? }
-  const capturedPollers = new Map()
+  const capturedPollers = new Map()  // key → { call, type, nativeId? }
   let timeoutSeq = 0
 
   window.setInterval = function (fn, delay, ...args) {
@@ -125,6 +125,7 @@
     if (typeof fn === 'function' && typeof delay === 'number' && delay >= 15000) {
       const key = 't:' + (++timeoutSeq)
       let nativeId
+      // Wrap to auto-clean from capturedPollers when the timeout fires naturally
       const wrapped = (...a) => {
         capturedPollers.delete(key)
         fn(...a)
@@ -151,7 +152,10 @@
   function triggerImmediatePoll() {
     log('triggerImmediatePoll: %d poller(s) captured', capturedPollers.size)
     if (capturedPollers.size === 0) return
-    for (const [key, entry] of capturedPollers.entries()) {
+    // Snapshot before iterating — fn() will schedule new timers which we
+    // capture, but we must NOT immediately trigger those or we loop forever.
+    const snapshot = [...capturedPollers.entries()]
+    for (const [key, entry] of snapshot) {
       if (entry.type === 'timeout') {
         OriginalClearTimeout.call(window, entry.nativeId)
         capturedPollers.delete(key)
@@ -159,7 +163,7 @@
       } else {
         log('triggerImmediatePoll: calling interval %s', key)
       }
-      try { entry.call() } catch (err) { log('poller error:', err) }
+      try { entry.call() } catch (err) { log('poller error: %o', err) }
     }
   }
 
@@ -177,7 +181,7 @@
     switch (e.data.type) {
       case 'INIT_OVERRIDES':
         overrides = e.data.overrides || {}
-        log('INIT_OVERRIDES:', overrides)
+        log('INIT_OVERRIDES: %o', overrides)
         break
       case 'SET_OVERRIDE':
         log('SET_OVERRIDE: %s =', e.data.key, e.data.value)
@@ -208,7 +212,7 @@
     const p = detectProvider(url)
     if (!p || p.transport !== 'polling' || !response.ok) return response
 
-    log('fetch: polling URL matched (%s) → %s %d', p.id, url.split('?')[0], response.status)
+    log('fetch: polling URL matched (%s) %s %d', p.id, url.split('?')[0], response.status)
 
     try {
       const data = await response.clone().json()
@@ -227,13 +231,18 @@
         log('fetch: isLDPut ✗ — response shape unexpected')
       }
     } catch (err) {
-      log('fetch: parse error', err)
+      log('fetch: parse error %o', err)
     }
 
     return response
   }
 
-  // ─── XHR interceptor (polling fallback) ───────────────────────────────────
+  // ─── XHR interceptor (polling) ────────────────────────────────────────────
+  //
+  // Our readystatechange listener is registered in the constructor, before the
+  // SDK adds its own listener. When state 4 arrives and it's a flag PUT, we
+  // shadow responseText/response on the XHR instance via Object.defineProperty
+  // so the SDK's listener reads the override-applied values.
 
   const OriginalXHR = window.XMLHttpRequest
 
@@ -247,20 +256,33 @@
       return originalOpen(method, url, ...args)
     }
 
+    // Registered first — fires before SDK's listener
     xhr.addEventListener('readystatechange', function () {
       if (xhr.readyState !== 4 || xhr.status !== 200) return
       const p = detectProvider(requestUrl)
       if (!p || p.transport !== 'polling') return
       log('XHR: polling URL matched (%s) → %s', p.id, requestUrl.split('?')[0])
       try {
-        const data = JSON.parse(xhr.responseText)
-        if (isLDPut(data)) {
-          log('XHR: isLDPut ✓, %d flags', Object.keys(data).length)
-          setDetected(p.id, 'polling')
-          currentFlags = data
-          notifyExtension(data, overrides)
+        const raw = OriginalXHR.prototype.responseText.__defineGetter__
+          ? xhr.responseText  // read native value before we shadow it
+          : Object.getOwnPropertyDescriptor(OriginalXHR.prototype, 'responseText').get.call(xhr)
+        const data = JSON.parse(raw)
+        if (!isLDPut(data)) {
+          log('XHR: isLDPut ✗')
+          return
         }
-      } catch (_) {}
+        log('XHR: isLDPut ✓, %d flags — patching responseText', Object.keys(data).length)
+        setDetected(p.id, 'polling')
+        currentFlags = data
+        const modified = applyOverrides(data)
+        const modifiedJson = JSON.stringify(modified)
+        // Shadow native responseText/response so SDK's listener reads patched values
+        Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
+        Object.defineProperty(xhr, 'response',     { get: () => modifiedJson, configurable: true })
+        notifyExtension(data, overrides)
+      } catch (err) {
+        log('XHR: error %o', err)
+      }
     })
 
     return xhr
