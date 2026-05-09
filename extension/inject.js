@@ -235,7 +235,9 @@
   window.XMLHttpRequest = function () {
     const xhr = new OriginalXHR()
     let requestUrl = ''
-    const capturedSdkHandlers = []  // readystatechange handlers registered after ours
+    const capturedSdkHandlers = []  // handlers registered via addEventListener after ours
+    let onRscHandler = null         // handler assigned via xhr.onreadystatechange = fn
+    let onRscWired = false          // wrapper listener registered at most once
 
     const originalOpen = xhr.open.bind(xhr)
     xhr.open = function (method, url, ...args) {
@@ -243,16 +245,33 @@
       return originalOpen(method, url, ...args)
     }
 
-    // Override addEventListener to capture SDK's readystatechange handlers.
-    // Our own handler is registered via originalAddEventListener (below) so
-    // it does NOT appear in capturedSdkHandlers.
+    // Capture handlers registered via addEventListener (after ours).
     const originalAddEventListener = xhr.addEventListener.bind(xhr)
     xhr.addEventListener = function (type, listener, options) {
       if (type === 'readystatechange') capturedSdkHandlers.push(listener)
       return originalAddEventListener(type, listener, options)
     }
 
-    // Registered first — fires before the SDK's listener
+    // Intercept onreadystatechange property assignment.
+    // When the SDK does `xhr.onreadystatechange = fn` we store fn and wire it
+    // as a regular event listener (via originalAddEventListener) so it fires
+    // after our own listener in registration order.
+    Object.defineProperty(xhr, 'onreadystatechange', {
+      get: () => onRscHandler,
+      set: (fn) => {
+        onRscHandler = fn
+        if (fn && !onRscWired) {
+          onRscWired = true
+          originalAddEventListener('readystatechange', function () {
+            if (onRscHandler) onRscHandler.call(xhr)
+          })
+        }
+      },
+      configurable: true,
+    })
+
+    // Our listener — registered first via originalAddEventListener so it fires
+    // before any SDK handler (both addEventListener and onreadystatechange).
     originalAddEventListener('readystatechange', function () {
       if (xhr.readyState !== 4 || xhr.status !== 200) return
       const p = detectProvider(requestUrl)
@@ -264,10 +283,14 @@
         setDetected(p.id, 'polling')
         currentFlags = data
 
-        // Store SDK's handlers for future fake-put replay
-        if (capturedSdkHandlers.length > 0) {
-          sdkPollingHandlers.push({ xhr, fns: [...capturedSdkHandlers] })
-          log('XHR: stored %d SDK handler(s) for polling fake-put', capturedSdkHandlers.length)
+        // Collect all SDK handlers for fake-put replay
+        const sdkFns = [...capturedSdkHandlers]
+        if (onRscHandler) sdkFns.push(onRscHandler)
+        if (sdkFns.length > 0) {
+          sdkPollingHandlers.push({ xhr, fns: sdkFns })
+          log('XHR: stored %d SDK handler(s) for polling fake-put', sdkFns.length)
+        } else {
+          log('XHR: no SDK handlers captured — fake-put unavailable')
         }
 
         const modified = applyOverrides(data, true)
