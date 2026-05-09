@@ -230,7 +230,10 @@
 
   window.fetch = async function (input, init) {
     const url = input instanceof Request ? input.url : String(input)
+    const isLD = url.includes('launchdarkly') || detectProvider(url) !== null
+    if (isLD) log('fetch: → %s', url.split('?')[0])
     const response = await OriginalFetch.call(this, input, init)
+    if (isLD) log('fetch: ← %s  status=%d  ok=%s', url.split('?')[0], response.status, response.ok)
 
     const p = detectProvider(url)
     if (!p || p.transport !== 'polling' || !response.ok) return response
@@ -271,11 +274,13 @@
 
   window.XMLHttpRequest = function () {
     const xhr = new OriginalXHR()
+    log('XHR: new instance')
     let requestUrl = ''
 
     const originalOpen = xhr.open.bind(xhr)
     xhr.open = function (method, url, ...args) {
       requestUrl = typeof url === 'string' ? url : String(url)
+      log('XHR open: %s %s', method, requestUrl.split('?')[0])
       return originalOpen(method, url, ...args)
     }
 
