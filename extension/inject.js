@@ -73,7 +73,6 @@
   // ─── SSE: fake put replay for immediate override feedback ─────────────────
 
   function fireFakePut() {
-    if (detectedTransport !== 'sse') return
     if (sdkPutListeners.length === 0 || Object.keys(currentFlags).length === 0) return
     const modified = applyOverrides(currentFlags)
     const fakeEvent = new MessageEvent('put', { data: JSON.stringify(modified) })
@@ -81,6 +80,42 @@
       try { listener(fakeEvent) } catch (_) {}
     }
     notifyExtension(currentFlags, overrides)
+  }
+
+  // ─── Polling: force immediate re-poll by replaying captured SDK pollers ───
+  //
+  // Intercepts setInterval so that when the SDK registers its polling loop
+  // (typically 30s), we can trigger it immediately on override changes.
+  // The SDK's poll fn calls window.fetch, which our interceptor handles —
+  // overrides are applied and the modified response is returned to the SDK.
+
+  const OriginalSetInterval = window.setInterval
+  const OriginalClearInterval = window.clearInterval
+  const capturedPollers = new Map()
+
+  window.setInterval = function (fn, delay, ...args) {
+    const id = OriginalSetInterval.call(this, fn, delay, ...args)
+    if (typeof fn === 'function' && typeof delay === 'number' && delay >= 15000) {
+      capturedPollers.set(id, () => fn(...args))
+    }
+    return id
+  }
+
+  window.clearInterval = function (id) {
+    capturedPollers.delete(id)
+    return OriginalClearInterval.call(this, id)
+  }
+
+  function triggerImmediatePoll() {
+    if (capturedPollers.size === 0) return
+    for (const fn of capturedPollers.values()) {
+      try { fn() } catch (_) {}
+    }
+  }
+
+  function applyOverrideImmediate() {
+    if (detectedTransport === 'sse') fireFakePut()
+    else if (detectedTransport === 'polling') triggerImmediatePoll()
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────
@@ -93,15 +128,15 @@
         break
       case 'SET_OVERRIDE':
         overrides[e.data.key] = e.data.value
-        fireFakePut()
+        applyOverrideImmediate()
         break
       case 'CLEAR_OVERRIDE':
         delete overrides[e.data.key]
-        fireFakePut()
+        applyOverrideImmediate()
         break
       case 'CLEAR_ALL_OVERRIDES':
         overrides = {}
-        fireFakePut()
+        applyOverrideImmediate()
         break
     }
   })

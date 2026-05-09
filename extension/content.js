@@ -7,6 +7,10 @@
 window.addEventListener('message', (e) => {
   if (!e.data || e.data.source !== 'ffd-inject') return
 
+  // Extension context is invalidated when the extension reloads mid-page.
+  // Stop trying to communicate — user must refresh the tab.
+  if (!chrome.runtime?.id) return
+
   if (e.data.type === 'REQUEST_OVERRIDES') {
     chrome.storage.local.get('ffd:overrides', (result) => {
       window.postMessage({
