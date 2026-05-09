@@ -263,10 +263,7 @@
       if (!p || p.transport !== 'polling') return
       log('XHR: polling URL matched (%s) → %s', p.id, requestUrl.split('?')[0])
       try {
-        const raw = OriginalXHR.prototype.responseText.__defineGetter__
-          ? xhr.responseText  // read native value before we shadow it
-          : Object.getOwnPropertyDescriptor(OriginalXHR.prototype, 'responseText').get.call(xhr)
-        const data = JSON.parse(raw)
+        const data = JSON.parse(xhr.responseText)
         if (!isLDPut(data)) {
           log('XHR: isLDPut ✗')
           return
