@@ -65,10 +65,10 @@
         result[key] = {
           ...flag,
           value: overrides[key],
-          // Bump version so the SDK's change-detection (version comparison) treats
-          // this as a newer value and emits a change event to re-render the app.
-          // Only needed for polling — SSE fake-put doesn't go through version checks.
-          ...(bumpVersion ? { version: (flag.version || 0) + 1 } : {}),
+          ...(bumpVersion ? {
+            version: (flag.version || 0) + 1,
+            ...(flag.flagVersion !== undefined ? { flagVersion: flag.flagVersion + 1 } : {}),
+          } : {}),
         }
       } else {
         result[key] = flags[key]
@@ -296,10 +296,22 @@
         currentFlags = data
         const modified = applyOverrides(data, true)
         const modifiedJson = JSON.stringify(modified)
+        // Log patch details for any overridden flags so we can verify version bumps
+        for (const k of Object.keys(overrides)) {
+          if (data[k] && modified[k]) {
+            log('XHR: patching %s: value %o→%o  version %d→%d  flagVersion %o→%o  responseType=%s',
+              k, data[k].value, modified[k].value,
+              data[k].version, modified[k].version,
+              data[k].flagVersion, modified[k].flagVersion,
+              xhr.responseType || '(empty)')
+          }
+        }
         // Shadow native responseText/response so SDK's listener reads patched values.
         // response getter checks responseType: if 'json', SDK expects a parsed object.
         Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
         Object.defineProperty(xhr, 'response', { get: function() { return xhr.responseType === 'json' ? modified : modifiedJson }, configurable: true })
+        // Verify the shadow actually works (own property overrides prototype getter)
+        log('XHR: shadow verify — responseText matches? %s  responseType=%s', xhr.responseText === modifiedJson, xhr.responseType || '(empty)')
         notifyExtension(data, overrides)
         // Flag the next ≥15s setTimeout as the poll timer (SDK schedules after XHR in some versions)
         expectingFlagPollTimer = true
