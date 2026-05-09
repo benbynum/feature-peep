@@ -1,4 +1,4 @@
-let state = { flags: {}, overrides: {} }
+let state = { flags: {}, overrides: {}, provider: null, transport: null }
 let expandedKey = null
 
 const PROVIDERS = {
@@ -10,9 +10,10 @@ const PROVIDERS = {
   }
 }
 
-function providerBadgeHTML(provider) {
+function providerBadgeHTML(provider, transport) {
   const p = PROVIDERS[provider]
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">detected</span>`
+  const transportLabel = transport === 'sse' ? 'streaming' : transport === 'polling' ? 'polling' : 'detected'
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel}</span>`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -63,9 +64,8 @@ function render() {
 
   emptyEl.classList.add('hidden')
   flagsEl.classList.remove('hidden')
-  if (badgeEl.classList.contains('hidden')) {
-    badgeEl.innerHTML = providerBadgeHTML('launchdarkly')
-  }
+  const provider = state.provider || 'launchdarkly'
+  badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
   badgeEl.classList.remove('hidden')
 
   if (overrideCount > 0) {
@@ -270,7 +270,7 @@ retryBtn.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'GET_FLAGS' }, (response) => {
     retryBtn.classList.remove('spinning')
     if (response) {
-      state = response
+      state = { flags: {}, overrides: {}, provider: null, transport: null, ...response }
       render()
     }
   })
@@ -286,7 +286,7 @@ document.getElementById('clear-all-btn').addEventListener('click', () => {
 // Request current state from background on open
 chrome.runtime.sendMessage({ type: 'GET_FLAGS' }, (response) => {
   if (response) {
-    state = response
+    state = { flags: {}, overrides: {}, provider: null, transport: null, ...response }
     render()
   }
 })
@@ -296,6 +296,8 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'FLAGS_UPDATE') {
     state.flags = msg.flags
     state.overrides = msg.overrides
+    state.provider = msg.provider || state.provider
+    state.transport = msg.transport || state.transport
     render()
   }
 })

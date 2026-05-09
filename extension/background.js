@@ -22,9 +22,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // FLAGS_UPDATE from content script
   if (msg.type === 'FLAGS_UPDATE' && sender.tab) {
-    tabState[sender.tab.id] = { flags: msg.flags, overrides: msg.overrides }
+    tabState[sender.tab.id] = { flags: msg.flags, overrides: msg.overrides, provider: msg.provider, transport: msg.transport }
     if (sender.tab.id === activeTabId) {
-      chrome.runtime.sendMessage({ type: 'FLAGS_UPDATE', flags: msg.flags, overrides: msg.overrides })
+      chrome.runtime.sendMessage({ type: 'FLAGS_UPDATE', flags: msg.flags, overrides: msg.overrides, provider: msg.provider, transport: msg.transport })
         .catch(() => {})
     }
     return
@@ -37,7 +37,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         activeTabId = tabs[0].id
         activeWindowId = tabs[0].windowId
       }
-      sendResponse(tabState[activeTabId] || { flags: {}, overrides: {} })
+      sendResponse(tabState[activeTabId] || { flags: {}, overrides: {}, provider: null, transport: null })
     })
     return true  // Keep channel open for async sendResponse
   }
