@@ -10,6 +10,14 @@
   // SSE only — stores SDK put listeners for fake event replay on override
   const sdkPutListeners = []
 
+  // Polling: track which setTimeout is the flag poll timer.
+  // After a successful flag-PUT XHR response, the SDK schedules its next poll
+  // via setTimeout. We mark the next captured ≥15s timeout as the flag poll
+  // timer so triggerImmediatePoll only triggers THAT one, not unrelated timers
+  // (e.g. LD's 15-min diagnostic event flusher).
+  let expectingFlagPollTimer = false
+  let flagPollTimerKey = null
+
   log('loaded')
 
   // ─── Provider + URL detection ─────────────────────────────────────────────
@@ -131,8 +139,10 @@
         fn(...a)
       }
       nativeId = OriginalSetTimeout.call(this, wrapped, delay, ...args)
-      capturedPollers.set(key, { call: () => fn(...args), type: 'timeout', nativeId, key })
-      log('setTimeout captured: delay=%dms, key=%s, total pollers=%d', delay, key, capturedPollers.size)
+      const isFlagPoll = expectingFlagPollTimer
+      if (isFlagPoll) { flagPollTimerKey = key; expectingFlagPollTimer = false }
+      capturedPollers.set(key, { call: () => fn(...args), type: 'timeout', nativeId, key, isFlagPoll })
+      log('setTimeout captured: delay=%dms, key=%s, isFlagPoll=%s, total pollers=%d', delay, key, isFlagPoll, capturedPollers.size)
       return nativeId
     }
     return OriginalSetTimeout.call(this, fn, delay, ...args)
@@ -142,6 +152,7 @@
     for (const [key, entry] of capturedPollers.entries()) {
       if (entry.type === 'timeout' && entry.nativeId === id) {
         capturedPollers.delete(key)
+        if (key === flagPollTimerKey) flagPollTimerKey = null
         log('clearTimeout removed poller: key=%s', key)
         break
       }
@@ -150,21 +161,18 @@
   }
 
   function triggerImmediatePoll() {
-    log('triggerImmediatePoll: %d poller(s) captured', capturedPollers.size)
-    if (capturedPollers.size === 0) return
-    // Snapshot before iterating — fn() will schedule new timers which we
-    // capture, but we must NOT immediately trigger those or we loop forever.
-    const snapshot = [...capturedPollers.entries()]
-    for (const [key, entry] of snapshot) {
-      if (entry.type === 'timeout') {
-        OriginalClearTimeout.call(window, entry.nativeId)
-        capturedPollers.delete(key)
-        log('triggerImmediatePoll: cancelled timeout %s, calling immediately', key)
-      } else {
-        log('triggerImmediatePoll: calling interval %s', key)
-      }
-      try { entry.call() } catch (err) { log('poller error: %o', err) }
+    log('triggerImmediatePoll: flagPollTimerKey=%s, capturedPollers=%d', flagPollTimerKey, capturedPollers.size)
+    const entry = flagPollTimerKey ? capturedPollers.get(flagPollTimerKey) : null
+    if (!entry) {
+      log('triggerImmediatePoll: flag poll timer not captured — override applies on next natural poll')
+      return
     }
+    const key = flagPollTimerKey
+    log('triggerImmediatePoll: cancelling %s and calling immediately', key)
+    OriginalClearTimeout.call(window, entry.nativeId)
+    capturedPollers.delete(key)
+    flagPollTimerKey = null
+    try { entry.call() } catch (err) { log('poller error: %o', err) }
   }
 
   function applyOverrideImmediate() {
@@ -277,6 +285,8 @@
         Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
         Object.defineProperty(xhr, 'response',     { get: () => modifiedJson, configurable: true })
         notifyExtension(data, overrides)
+        // Next ≥15s setTimeout captured after this point is the SDK's next poll timer
+        expectingFlagPollTimer = true
       } catch (err) {
         log('XHR: error %o', err)
       }
