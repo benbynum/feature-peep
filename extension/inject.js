@@ -141,7 +141,7 @@
       nativeId = OriginalSetTimeout.call(this, wrapped, delay, ...args)
       const isFlagPoll = expectingFlagPollTimer
       if (isFlagPoll) { flagPollTimerKey = key; expectingFlagPollTimer = false }
-      capturedPollers.set(key, { call: () => fn(...args), type: 'timeout', nativeId, key, isFlagPoll })
+      capturedPollers.set(key, { call: () => fn(...args), type: 'timeout', nativeId, key, isFlagPoll, delay })
       log('setTimeout captured: delay=%dms, key=%s, isFlagPoll=%s, total pollers=%d', delay, key, isFlagPoll, capturedPollers.size)
       return nativeId
     }
@@ -164,15 +164,20 @@
     log('triggerImmediatePoll: flagPollTimerKey=%s, capturedPollers=%d', flagPollTimerKey, capturedPollers.size)
     const entry = flagPollTimerKey ? capturedPollers.get(flagPollTimerKey) : null
     if (!entry) {
-      log('triggerImmediatePoll: flag poll timer not captured — override applies on next natural poll')
+      log('triggerImmediatePoll: no flag poll timer identified — override applies on next natural poll')
       return
     }
     const key = flagPollTimerKey
-    log('triggerImmediatePoll: cancelling %s and calling immediately', key)
+    // Reschedule at 1s instead of calling directly. The SDK's poll fn fires via
+    // its own code path, making the XHR naturally (overrides applied by our
+    // interceptor). Avoids side effects of calling it synchronously (e.g.
+    // diagnostic event flushes that run as part of the same callback).
+    log('triggerImmediatePoll: rescheduling %s to fire in 1s (was %dms)', key, entry.delay)
     OriginalClearTimeout.call(window, entry.nativeId)
     capturedPollers.delete(key)
     flagPollTimerKey = null
-    try { entry.call() } catch (err) { log('poller error: %o', err) }
+    OriginalSetTimeout.call(window, entry.call, 1000)
+    // 1s delay is below our capture threshold so no re-capture / infinite loop
   }
 
   function applyOverrideImmediate() {
@@ -285,8 +290,21 @@
         Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
         Object.defineProperty(xhr, 'response',     { get: () => modifiedJson, configurable: true })
         notifyExtension(data, overrides)
-        // Next ≥15s setTimeout captured after this point is the SDK's next poll timer
+        // Flag the next ≥15s setTimeout as the poll timer (SDK schedules after XHR in some versions)
         expectingFlagPollTimer = true
+        // Retroactive: SDK schedules the poll timer BEFORE the XHR in some versions.
+        // If we haven't identified the flag poll timer yet, pick the shortest-delay
+        // captured timer — it's most likely the flag poll, not a diagnostics flush.
+        if (!flagPollTimerKey && capturedPollers.size > 0) {
+          let minDelay = Infinity, minKey = null
+          for (const [k, entry] of capturedPollers.entries()) {
+            if (entry.delay < minDelay) { minDelay = entry.delay; minKey = k }
+          }
+          if (minKey) {
+            flagPollTimerKey = minKey
+            log('XHR: retroactively identified flag poll timer: %s (delay=%dms)', minKey, minDelay)
+          }
+        }
       } catch (err) {
         log('XHR: error %o', err)
       }
