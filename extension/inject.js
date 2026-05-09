@@ -57,12 +57,22 @@
     return vals.length > 0 && typeof vals[0] === 'object' && vals[0] !== null && 'version' in vals[0]
   }
 
-  function applyOverrides(flags) {
+  function applyOverrides(flags, bumpVersion = false) {
     const result = {}
     for (const key of Object.keys(flags)) {
-      result[key] = overrides[key] !== undefined
-        ? { ...flags[key], value: overrides[key] }
-        : flags[key]
+      if (overrides[key] !== undefined) {
+        const flag = flags[key]
+        result[key] = {
+          ...flag,
+          value: overrides[key],
+          // Bump version so the SDK's change-detection (version comparison) treats
+          // this as a newer value and emits a change event to re-render the app.
+          // Only needed for polling — SSE fake-put doesn't go through version checks.
+          ...(bumpVersion ? { version: (flag.version || 0) + 1 } : {}),
+        }
+      } else {
+        result[key] = flags[key]
+      }
     }
     return result
   }
@@ -284,11 +294,12 @@
         log('XHR: isLDPut ✓, %d flags — patching responseText', Object.keys(data).length)
         setDetected(p.id, 'polling')
         currentFlags = data
-        const modified = applyOverrides(data)
+        const modified = applyOverrides(data, true)
         const modifiedJson = JSON.stringify(modified)
-        // Shadow native responseText/response so SDK's listener reads patched values
+        // Shadow native responseText/response so SDK's listener reads patched values.
+        // response getter checks responseType: if 'json', SDK expects a parsed object.
         Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
-        Object.defineProperty(xhr, 'response',     { get: () => modifiedJson, configurable: true })
+        Object.defineProperty(xhr, 'response', { get: function() { return xhr.responseType === 'json' ? modified : modifiedJson }, configurable: true })
         notifyExtension(data, overrides)
         // Flag the next ≥15s setTimeout as the poll timer (SDK schedules after XHR in some versions)
         expectingFlagPollTimer = true
