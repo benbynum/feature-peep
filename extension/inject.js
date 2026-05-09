@@ -1,4 +1,6 @@
 (function () {
+  const log = (...a) => console.log('[Flagtap]', ...a)
+
   let currentFlags = {}
   let overrides = {}
   let detectedProvider = null
@@ -6,6 +8,8 @@
 
   // SSE only — stores SDK put listeners for fake event replay on override
   const sdkPutListeners = []
+
+  log('loaded')
 
   // ─── Provider + URL detection ─────────────────────────────────────────────
   //
@@ -73,47 +77,95 @@
   // ─── SSE: fake put replay for immediate override feedback ─────────────────
 
   function fireFakePut() {
+    log('fireFakePut: listeners=%d, flags=%d', sdkPutListeners.length, Object.keys(currentFlags).length)
     if (sdkPutListeners.length === 0 || Object.keys(currentFlags).length === 0) return
     const modified = applyOverrides(currentFlags)
     const fakeEvent = new MessageEvent('put', { data: JSON.stringify(modified) })
     for (const listener of sdkPutListeners) {
-      try { listener(fakeEvent) } catch (_) {}
+      try { listener(fakeEvent) } catch (err) { log('fireFakePut listener error:', err) }
     }
     notifyExtension(currentFlags, overrides)
   }
 
-  // ─── Polling: force immediate re-poll by replaying captured SDK pollers ───
+  // ─── Timer interceptors (force-poll on override) ──────────────────────────
   //
-  // Intercepts setInterval so that when the SDK registers its polling loop
-  // (typically 30s), we can trigger it immediately on override changes.
-  // The SDK's poll fn calls window.fetch, which our interceptor handles —
-  // overrides are applied and the modified response is returned to the SDK.
+  // Intercepts setInterval AND recursive setTimeout so we can trigger the
+  // SDK's polling callback immediately when an override is set, rather than
+  // waiting for the next natural poll cycle (usually 30 s).
+  //
+  // For setTimeout: we cancel the pending timer and call the fn immediately;
+  // the fn reschedules its own next poll as normal.
 
   const OriginalSetInterval = window.setInterval
   const OriginalClearInterval = window.clearInterval
+  const OriginalSetTimeout = window.setTimeout
+  const OriginalClearTimeout = window.clearTimeout
+
+  // key → { call, type, nativeId? }
   const capturedPollers = new Map()
+  let timeoutSeq = 0
 
   window.setInterval = function (fn, delay, ...args) {
     const id = OriginalSetInterval.call(this, fn, delay, ...args)
     if (typeof fn === 'function' && typeof delay === 'number' && delay >= 15000) {
-      capturedPollers.set(id, () => fn(...args))
+      capturedPollers.set('i:' + id, { call: () => fn(...args), type: 'interval' })
+      log('setInterval captured: delay=%dms, total pollers=%d', delay, capturedPollers.size)
     }
     return id
   }
 
   window.clearInterval = function (id) {
-    capturedPollers.delete(id)
+    if (capturedPollers.delete('i:' + id)) {
+      log('setInterval cleared: id=%d', id)
+    }
     return OriginalClearInterval.call(this, id)
   }
 
+  window.setTimeout = function (fn, delay, ...args) {
+    if (typeof fn === 'function' && typeof delay === 'number' && delay >= 15000) {
+      const key = 't:' + (++timeoutSeq)
+      let nativeId
+      const wrapped = (...a) => {
+        capturedPollers.delete(key)
+        fn(...a)
+      }
+      nativeId = OriginalSetTimeout.call(this, wrapped, delay, ...args)
+      capturedPollers.set(key, { call: () => fn(...args), type: 'timeout', nativeId, key })
+      log('setTimeout captured: delay=%dms, key=%s, total pollers=%d', delay, key, capturedPollers.size)
+      return nativeId
+    }
+    return OriginalSetTimeout.call(this, fn, delay, ...args)
+  }
+
+  window.clearTimeout = function (id) {
+    for (const [key, entry] of capturedPollers.entries()) {
+      if (entry.type === 'timeout' && entry.nativeId === id) {
+        capturedPollers.delete(key)
+        log('clearTimeout removed poller: key=%s', key)
+        break
+      }
+    }
+    return OriginalClearTimeout.call(this, id)
+  }
+
   function triggerImmediatePoll() {
+    log('triggerImmediatePoll: %d poller(s) captured', capturedPollers.size)
     if (capturedPollers.size === 0) return
-    for (const fn of capturedPollers.values()) {
-      try { fn() } catch (_) {}
+    for (const [key, entry] of capturedPollers.entries()) {
+      if (entry.type === 'timeout') {
+        OriginalClearTimeout.call(window, entry.nativeId)
+        capturedPollers.delete(key)
+        log('triggerImmediatePoll: cancelled timeout %s, calling immediately', key)
+      } else {
+        log('triggerImmediatePoll: calling interval %s', key)
+      }
+      try { entry.call() } catch (err) { log('poller error:', err) }
     }
   }
 
   function applyOverrideImmediate() {
+    log('applyOverrideImmediate: transport=%s, pollers=%d, sseListeners=%d',
+      detectedTransport, capturedPollers.size, sdkPutListeners.length)
     if (detectedTransport === 'sse') fireFakePut()
     else if (detectedTransport === 'polling') triggerImmediatePoll()
   }
@@ -125,16 +177,20 @@
     switch (e.data.type) {
       case 'INIT_OVERRIDES':
         overrides = e.data.overrides || {}
+        log('INIT_OVERRIDES:', overrides)
         break
       case 'SET_OVERRIDE':
+        log('SET_OVERRIDE: %s =', e.data.key, e.data.value)
         overrides[e.data.key] = e.data.value
         applyOverrideImmediate()
         break
       case 'CLEAR_OVERRIDE':
+        log('CLEAR_OVERRIDE: %s', e.data.key)
         delete overrides[e.data.key]
         applyOverrideImmediate()
         break
       case 'CLEAR_ALL_OVERRIDES':
+        log('CLEAR_ALL_OVERRIDES')
         overrides = {}
         applyOverrideImmediate()
         break
@@ -142,13 +198,6 @@
   })
 
   // ─── Fetch interceptor (polling) ──────────────────────────────────────────
-  //
-  // Intercepts polling responses, applies overrides, returns modified response
-  // to the SDK. The SDK never sees unoverridden values during an active override.
-  //
-  // Note: overrides take effect on the NEXT poll cycle after being set, since
-  // the SDK has already requested the current response before the override was
-  // applied. fireFakePut() handles SSE; polling relies on the next fetch.
 
   const OriginalFetch = window.fetch
 
@@ -159,9 +208,12 @@
     const p = detectProvider(url)
     if (!p || p.transport !== 'polling' || !response.ok) return response
 
+    log('fetch: polling URL matched (%s) → %s %d', p.id, url.split('?')[0], response.status)
+
     try {
       const data = await response.clone().json()
       if (isLDPut(data)) {
+        log('fetch: isLDPut ✓, %d flags', Object.keys(data).length)
         setDetected(p.id, 'polling')
         currentFlags = data
         notifyExtension(data, overrides)
@@ -171,18 +223,17 @@
           statusText: response.statusText,
           headers: { 'Content-Type': 'application/json' },
         })
+      } else {
+        log('fetch: isLDPut ✗ — response shape unexpected')
       }
-    } catch (_) {}
+    } catch (err) {
+      log('fetch: parse error', err)
+    }
 
     return response
   }
 
   // ─── XHR interceptor (polling fallback) ───────────────────────────────────
-  //
-  // For older SDK versions or bundlers that use XMLHttpRequest instead of fetch.
-  // Display only — XHR responses cannot be modified retroactively, so overrides
-  // are reflected in the popup but the SDK sees the original values until the
-  // next poll cycle.
 
   const OriginalXHR = window.XMLHttpRequest
 
@@ -200,9 +251,11 @@
       if (xhr.readyState !== 4 || xhr.status !== 200) return
       const p = detectProvider(requestUrl)
       if (!p || p.transport !== 'polling') return
+      log('XHR: polling URL matched (%s) → %s', p.id, requestUrl.split('?')[0])
       try {
         const data = JSON.parse(xhr.responseText)
         if (isLDPut(data)) {
+          log('XHR: isLDPut ✓, %d flags', Object.keys(data).length)
           setDetected(p.id, 'polling')
           currentFlags = data
           notifyExtension(data, overrides)
@@ -222,13 +275,17 @@
   window.EventSource = function (url, init) {
     const urlStr = typeof url === 'string' ? url : String(url)
     const p = detectProvider(urlStr)
+    log('EventSource created: %s → %s', urlStr.split('?')[0], p ? p.transport : 'not detected')
     const es = new OriginalEventSource(url, init)
     const originalAddEventListener = es.addEventListener.bind(es)
 
     es.addEventListener = function (type, listener, options) {
       if (type === 'put' || type === 'patch' || type === 'message') {
 
-        if (type === 'put') sdkPutListeners.push(listener)
+        if (type === 'put') {
+          sdkPutListeners.push(listener)
+          log('EventSource: put listener registered, total=%d', sdkPutListeners.length)
+        }
 
         originalAddEventListener(type, (e) => {
           try {
@@ -236,6 +293,7 @@
 
             if (type === 'put' && isLDPut(raw)) {
               if (p) setDetected(p.id, 'sse')
+              log('EventSource put: %d flags, provider=%s', Object.keys(raw).length, p?.id)
               currentFlags = raw
               const modified = applyOverrides(raw)
               notifyExtension(raw, overrides)
@@ -254,6 +312,7 @@
                 updated = raw.data
               }
               if (key && updated) {
+                log('EventSource patch: %s', key)
                 currentFlags[key] = updated
                 if (overrides[key] !== undefined) {
                   const patchedOverride = { ...raw }
