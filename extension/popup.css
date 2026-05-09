@@ -28,8 +28,24 @@ header {
 }
 
 .header-left { display: flex; align-items: center; gap: 6px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
 .logo { font-size: 14px; }
 .title { font-weight: 600; font-size: 13px; letter-spacing: 0.01em; }
+
+.search-toggle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.search-toggle:hover { color: #fff; }
+.search-toggle.active { color: #fff; background: rgba(255, 255, 255, 0.15); }
 
 
 .retry-btn {
@@ -46,8 +62,9 @@ header {
 
 .retry-btn:hover { color: #374151; }
 
-.retry-btn.spinning svg {
-  animation: spin 0.7s linear infinite;
+.retry-btn.spinning svg,
+.poll-refresh-btn.spinning svg {
+  animation: spin 0.7s linear 1;
 }
 
 @keyframes spin {
@@ -81,7 +98,12 @@ header {
   font-size: 10px;
   font-weight: 400;
   opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
+
+.transport-icon { flex-shrink: 0; }
 
 /* ── States ─────────────────────────────────────────────────── */
 
@@ -94,6 +116,46 @@ header {
 
 .state-message .hint { font-size: 11px; color: #999; margin-top: 4px; }
 
+/* ── Search bar ──────────────────────────────────────────────── */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
+}
+
+.search-icon { color: #9ca3af; flex-shrink: 0; }
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: #1a1a1a;
+  outline: none;
+  min-width: 0;
+}
+
+.search-input::placeholder { color: #9ca3af; }
+
+.search-clear {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.search-clear:hover { color: #374151; }
+
 /* ── Toolbar ─────────────────────────────────────────────────── */
 
 .toolbar {
@@ -102,9 +164,38 @@ header {
   justify-content: space-between;
   padding: 6px 12px;
   background: #f5f5f5;
-  border-bottom: 1px solid #e8e8e8;
+  border-top: 1px solid #e8e8e8;
   min-height: 32px;
   flex-shrink: 0;
+}
+
+.poll-refresh-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
+}
+
+.poll-refresh-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.poll-refresh-btn:hover { color: #374151; }
+
+.poll-refresh-hint {
+  font-size: 10px;
+  color: #9ca3af;
 }
 
 .override-count {
@@ -173,6 +264,9 @@ header {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 11px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
   flex-shrink: 0;
 }
 

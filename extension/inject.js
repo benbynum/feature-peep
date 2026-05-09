@@ -1,24 +1,18 @@
 (function () {
   // Format-specifier-aware logger — console substitutes %s/%d/%o correctly
-  const log = (fmt, ...args) => console.log(`[Flagtap] ${fmt}`, ...args)
+  const log = (fmt, ...args) => console.log(`[FeatureCreep] ${fmt}`, ...args)
 
   let currentFlags = {}
   let overrides = {}
   let detectedProvider = null
   let detectedTransport = null
 
-  // Monotonically increasing version bump applied to every XHR patch or fake put.
-  // Ensures each push to the SDK has a strictly higher version than the last,
-  // so the SDK's change-detection (newVersion > storedVersion) always fires.
+  // Monotonically increasing version bump applied to every XHR/fetch patch.
+  // Ensures the SDK's change-detection (newVersion > storedVersion) always fires.
   let pollBump = 0
 
   // SSE — stores SDK put listeners for fake event replay on override
   const sdkPutListeners = []
-
-  // Polling — stores the SDK's readystatechange handlers from the evalx XHR
-  // so we can replay them directly (analogous to SSE fake-put) instead of
-  // waiting for the next natural poll.
-  const sdkPollingHandlers = []  // { xhr, fns: [fn, ...] }
 
   log('loaded')
 
@@ -56,8 +50,6 @@
     return vals.length > 0 && typeof vals[0] === 'object' && vals[0] !== null && 'version' in vals[0]
   }
 
-  // Applies current overrides to a flag map. bumpVersion increments pollBump
-  // so the SDK's version comparison sees this as newer than what it last stored.
   function applyOverrides(flags, bumpVersion = false) {
     if (bumpVersion) ++pollBump
     const result = {}
@@ -81,7 +73,7 @@
 
   function notifyExtension(flags, ovr) {
     window.postMessage({
-      source: 'ffd-inject',
+      source: 'fc-inject',
       type: 'FLAGS_UPDATE',
       flags,
       overrides: ovr,
@@ -108,60 +100,19 @@
     notifyExtension(currentFlags, overrides)
   }
 
-  // ─── Polling: fake XHR response replay ───────────────────────────────────
-  //
-  // The LD SDK makes one evalx XHR at startup. Subsequent polls use a mechanism
-  // we can't intercept via timers (the 15-min timer is the diagnostic flush, not
-  // the flag poll). Instead we store the SDK's readystatechange handlers from
-  // the initial evalx XHR and re-invoke them directly with patched data —
-  // exactly like SSE fake-put but for XHR.
-
-  function firePollingFakePut() {
-    log('firePollingFakePut: handlers=%d, flags=%d', sdkPollingHandlers.length, Object.keys(currentFlags).length)
-    if (sdkPollingHandlers.length === 0 || Object.keys(currentFlags).length === 0) return
-
-    ++pollBump
-    // Bump ALL flags so the SDK sees every flag as "newer", even ones being
-    // restored to their original value (e.g. after CLEAR_OVERRIDE).
-    const modified = {}
-    for (const key of Object.keys(currentFlags)) {
-      const flag = currentFlags[key]
-      modified[key] = {
-        ...flag,
-        value: overrides[key] !== undefined ? overrides[key] : flag.value,
-        version: (flag.version || 0) + pollBump,
-        ...(flag.flagVersion !== undefined ? { flagVersion: flag.flagVersion + pollBump } : {}),
-      }
-    }
-    const modifiedJson = JSON.stringify(modified)
-    log('firePollingFakePut: bump=%d  overrides=%d', pollBump, Object.keys(overrides).length)
-
-    const { xhr, fns } = sdkPollingHandlers[sdkPollingHandlers.length - 1]
-    Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
-    Object.defineProperty(xhr, 'response', {
-      get: function () { return xhr.responseType === 'json' ? modified : modifiedJson },
-      configurable: true,
-    })
-
-    for (const fn of fns) {
-      try { fn.call(xhr) } catch (e) { log('firePollingFakePut: handler error %o', e) }
-    }
-    notifyExtension(currentFlags, overrides)
-  }
-
   // ─── applyOverrideImmediate ───────────────────────────────────────────────
 
   function applyOverrideImmediate() {
-    log('applyOverrideImmediate: transport=%s, pollingHandlers=%d, sseListeners=%d',
-      detectedTransport, sdkPollingHandlers.length, sdkPutListeners.length)
+    log('applyOverrideImmediate: transport=%s, sseListeners=%d', detectedTransport, sdkPutListeners.length)
     if (detectedTransport === 'sse') fireFakePut()
-    else if (detectedTransport === 'polling') firePollingFakePut()
+    // Polling overrides are injected on page load via the XHR/fetch interceptors.
+    // The popup shows a "refresh page" prompt when the user changes an override.
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────
 
   window.addEventListener('message', (e) => {
-    if (!e.data || e.data.source !== 'ffd-content') return
+    if (!e.data || e.data.source !== 'fc-content') return
     switch (e.data.type) {
       case 'INIT_OVERRIDES':
         overrides = e.data.overrides || {}
@@ -222,24 +173,14 @@
   }
 
   // ─── XHR interceptor (polling) ────────────────────────────────────────────
-  //
-  // Two responsibilities:
-  // 1. Patch the initial evalx XHR response so overrides already in storage
-  //    apply immediately on page load (works because we register our
-  //    readystatechange listener before the SDK registers its own).
-  // 2. Capture the SDK's readystatechange handler(s) so firePollingFakePut
-  //    can replay them later without a new network round-trip.
+  // Patches the evalx XHR response so overrides in storage apply immediately
+  // on page load. The SDK sees overridden values from the very first request.
 
   const OriginalXHR = window.XMLHttpRequest
 
   window.XMLHttpRequest = function () {
     const xhr = new OriginalXHR()
     let requestUrl = ''
-    const capturedSdkHandlers = []  // handlers registered via addEventListener after ours
-    let onRscHandler = null         // handler assigned via xhr.onreadystatechange = fn
-    let onRscWired = false
-    let onLoadHandler = null        // handler assigned via xhr.onload = fn
-    let onLoadWired = false
 
     const originalOpen = xhr.open.bind(xhr)
     xhr.open = function (method, url, ...args) {
@@ -247,47 +188,7 @@
       return originalOpen(method, url, ...args)
     }
 
-    // Capture handlers registered via addEventListener (after ours).
-    const originalAddEventListener = xhr.addEventListener.bind(xhr)
-    xhr.addEventListener = function (type, listener, options) {
-      if (type === 'readystatechange' || type === 'load') capturedSdkHandlers.push(listener)
-      return originalAddEventListener(type, listener, options)
-    }
-
-    // Intercept onreadystatechange and onload property assignments.
-    // Wire each as a regular event listener so it fires after ours in
-    // registration order and is available for fake-put replay.
-    Object.defineProperty(xhr, 'onreadystatechange', {
-      get: () => onRscHandler,
-      set: (fn) => {
-        onRscHandler = fn
-        if (fn && !onRscWired) {
-          onRscWired = true
-          originalAddEventListener('readystatechange', function () {
-            if (onRscHandler) onRscHandler.call(xhr)
-          })
-        }
-      },
-      configurable: true,
-    })
-
-    Object.defineProperty(xhr, 'onload', {
-      get: () => onLoadHandler,
-      set: (fn) => {
-        onLoadHandler = fn
-        if (fn && !onLoadWired) {
-          onLoadWired = true
-          originalAddEventListener('load', function () {
-            if (onLoadHandler) onLoadHandler.call(xhr)
-          })
-        }
-      },
-      configurable: true,
-    })
-
-    // Our listener — registered first via originalAddEventListener so it fires
-    // before any SDK handler (both addEventListener and onreadystatechange).
-    originalAddEventListener('readystatechange', function () {
+    xhr.addEventListener.call(xhr, 'readystatechange', function () {
       if (xhr.readyState !== 4 || xhr.status !== 200) return
       const p = detectProvider(requestUrl)
       if (!p || p.transport !== 'polling') return
@@ -297,20 +198,6 @@
         log('XHR: isLDPut ✓, %d flags', Object.keys(data).length)
         setDetected(p.id, 'polling')
         currentFlags = data
-
-        // Collect all SDK handlers (readystatechange + load, both mechanisms)
-        const sdkFns = [...capturedSdkHandlers]
-        if (onRscHandler) sdkFns.push(onRscHandler)
-        if (onLoadHandler) sdkFns.push(onLoadHandler)
-        log('XHR: captured handlers — addEventListener=%d onrsc=%s onload=%s',
-          capturedSdkHandlers.length, !!onRscHandler, !!onLoadHandler)
-        if (sdkFns.length > 0) {
-          sdkPollingHandlers.push({ xhr, fns: sdkFns })
-          log('XHR: stored %d SDK handler(s) for polling fake-put', sdkFns.length)
-        } else {
-          log('XHR: no SDK handlers captured — fake-put unavailable')
-        }
-
         const modified = applyOverrides(data, true)
         const modifiedJson = JSON.stringify(modified)
         Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
@@ -406,5 +293,5 @@
   window.EventSource.OPEN = OriginalEventSource.OPEN
   window.EventSource.CLOSED = OriginalEventSource.CLOSED
 
-  window.postMessage({ source: 'ffd-inject', type: 'REQUEST_OVERRIDES' }, '*')
+  window.postMessage({ source: 'fc-inject', type: 'REQUEST_OVERRIDES' }, '*')
 })()

@@ -1,5 +1,10 @@
 let state = { flags: {}, overrides: {}, provider: null, transport: null }
 let expandedKey = null
+let pendingPollRefresh = false
+let searchQuery = ''
+let searchOpen = false
+let searchStateKey  = 'fc:searchOpen'
+let searchQueryKey  = 'fc:searchQuery'
 
 const PROVIDERS = {
   launchdarkly: {
@@ -10,10 +15,16 @@ const PROVIDERS = {
   }
 }
 
+const TRANSPORT_ICONS = {
+  polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,
+  sse:     `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>`,
+}
+
 function providerBadgeHTML(provider, transport) {
   const p = PROVIDERS[provider]
   const transportLabel = transport === 'sse' ? 'streaming' : transport === 'polling' ? 'polling' : 'detected'
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel}</span>`
+  const transportIcon = TRANSPORT_ICONS[transport] || ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -41,27 +52,45 @@ function send(msg) {
   return chrome.runtime.sendMessage(msg).catch(() => {})
 }
 
+// Sends an override mutation and marks a refresh needed for polling transport.
+function sendOverride(msg) {
+  send(msg)
+  if (state.transport === 'polling') pendingPollRefresh = true
+}
+
 // ── Render ────────────────────────────────────────────────────────────────
 
 function render() {
   const { flags, overrides } = state
   const keys = Object.keys(flags)
   const overrideCount = Object.keys(overrides).length
+  const filteredKeys = searchQuery
+    ? keys.filter(k => k.toLowerCase().includes(searchQuery.toLowerCase()))
+    : keys
 
-  const emptyEl   = document.getElementById('state-empty')
-  const flagsEl   = document.getElementById('state-flags')
-  const badgeEl   = document.getElementById('provider-badge')
-  const countEl   = document.getElementById('override-count')
-  const clearBtn  = document.getElementById('clear-all-btn')
-  const listEl    = document.getElementById('flag-list')
+  const emptyEl        = document.getElementById('state-empty')
+  const flagsEl        = document.getElementById('state-flags')
+  const badgeEl        = document.getElementById('provider-badge')
+  const toolbarEl      = document.getElementById('toolbar')
+  const countEl        = document.getElementById('override-count')
+  const clearBtn       = document.getElementById('clear-all-btn')
+  const pollRefreshBar = document.getElementById('poll-refresh-bar')
+  const listEl         = document.getElementById('flag-list')
 
   if (keys.length === 0) {
+    document.body.style.height = ''
     emptyEl.classList.remove('hidden')
     flagsEl.classList.add('hidden')
     badgeEl.classList.add('hidden')
+    toolbarEl.classList.add('hidden')
+    searchToggle.classList.add('hidden')
     return
   }
 
+  searchToggle.classList.remove('hidden')
+  searchToggle.classList.toggle('active', searchOpen)
+
+  document.body.style.height = '560px'
   emptyEl.classList.add('hidden')
   flagsEl.classList.remove('hidden')
   const provider = state.provider || 'launchdarkly'
@@ -70,16 +99,20 @@ function render() {
 
   if (overrideCount > 0) {
     countEl.textContent = `${overrideCount} override${overrideCount > 1 ? 's' : ''} active`
-    countEl.classList.remove('hidden')
-    clearBtn.classList.remove('hidden')
+    toolbarEl.classList.remove('hidden')
   } else {
-    countEl.classList.add('hidden')
-    clearBtn.classList.add('hidden')
+    toolbarEl.classList.add('hidden')
+  }
+
+  if (pendingPollRefresh && state.transport === 'polling') {
+    pollRefreshBar.classList.remove('hidden')
+  } else {
+    pollRefreshBar.classList.add('hidden')
   }
 
   listEl.innerHTML = ''
 
-  for (const key of keys.sort()) {
+  for (const key of filteredKeys.sort()) {
     const flag = flags[key]
     const hasOverride = key in overrides && JSON.stringify(overrides[key]) !== JSON.stringify(flag.value)
     const displayValue = hasOverride ? overrides[key] : flag.value
@@ -150,10 +183,10 @@ function render() {
         trueBtn.addEventListener('click', (e) => {
           e.stopPropagation()
           if (flag.value === true) {
-            send({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
           } else {
-            send({ type: 'SET_OVERRIDE', key, value: true })
+            sendOverride({ type: 'SET_OVERRIDE', key, value: true })
             state.overrides[key] = true
           }
           render()
@@ -165,10 +198,10 @@ function render() {
         falseBtn.addEventListener('click', (e) => {
           e.stopPropagation()
           if (flag.value === false) {
-            send({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
           } else {
-            send({ type: 'SET_OVERRIDE', key, value: false })
+            sendOverride({ type: 'SET_OVERRIDE', key, value: false })
             state.overrides[key] = false
           }
           render()
@@ -183,7 +216,7 @@ function render() {
           restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
-            send({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
             render()
           })
@@ -214,10 +247,10 @@ function render() {
             return
           }
           if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
-            send({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
           } else {
-            send({ type: 'SET_OVERRIDE', key, value: parsed })
+            sendOverride({ type: 'SET_OVERRIDE', key, value: parsed })
             state.overrides[key] = parsed
           }
           render()
@@ -244,7 +277,7 @@ function render() {
           restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
-            send({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: 'CLEAR_OVERRIDE', key })
             delete state.overrides[key]
             render()
           })
@@ -264,31 +297,103 @@ function render() {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
-const retryBtn = document.getElementById('retry-btn')
-retryBtn.addEventListener('click', () => {
-  retryBtn.classList.add('spinning')
-  chrome.runtime.sendMessage({ type: 'GET_FLAGS' }, (response) => {
-    retryBtn.classList.remove('spinning')
-    if (response) {
-      state = { flags: {}, overrides: {}, provider: null, transport: null, ...response }
-      render()
-    }
+// Resolves the active tab in the last-focused normal browser window.
+// Calling this fresh each time avoids stale background-side tracking state.
+function getActiveTab(callback) {
+  chrome.windows.getLastFocused({ windowTypes: ['normal'] }, (win) => {
+    if (chrome.runtime.lastError || !win) return callback(null)
+    chrome.tabs.query({ active: true, windowId: win.id }, (tabs) => {
+      callback(tabs[0] || null, win.id)
+    })
   })
+}
+
+function reloadActiveTab(btn) {
+  btn.classList.add('spinning')
+  btn.addEventListener('animationend', () => btn.classList.remove('spinning'), { once: true })
+  getActiveTab((tab) => {
+    if (tab) chrome.tabs.reload(tab.id)
+  })
+}
+
+const searchToggle = document.getElementById('search-toggle')
+const searchBar    = document.getElementById('search-bar')
+const searchInput  = document.getElementById('search-input')
+const searchClear  = document.getElementById('search-clear')
+
+function applySearchOpen() {
+  searchToggle.classList.toggle('active', searchOpen)
+  if (searchOpen) {
+    searchBar.classList.remove('hidden')
+    searchInput.value = searchQuery
+    searchClear.classList.toggle('hidden', !searchQuery)
+  } else {
+    searchBar.classList.add('hidden')
+    searchQuery = ''
+    searchInput.value = ''
+    searchClear.classList.add('hidden')
+    localStorage.removeItem(searchQueryKey)
+  }
+  localStorage.setItem(searchStateKey, searchOpen)
+}
+
+searchToggle.addEventListener('click', () => {
+  searchOpen = !searchOpen
+  applySearchOpen()
+  if (searchOpen) searchInput.focus()
+  else render()
 })
 
+searchInput.addEventListener('input', () => {
+  searchQuery = searchInput.value
+  searchClear.classList.toggle('hidden', !searchQuery)
+  localStorage.setItem(searchQueryKey, searchQuery)
+  render()
+})
+
+searchClear.addEventListener('click', () => {
+  searchQuery = ''
+  searchInput.value = ''
+  searchClear.classList.add('hidden')
+  localStorage.removeItem(searchQueryKey)
+  searchInput.focus()
+  render()
+})
+
+const retryBtn = document.getElementById('retry-btn')
+retryBtn.addEventListener('click', () => reloadActiveTab(retryBtn))
+
 document.getElementById('clear-all-btn').addEventListener('click', () => {
-  send({ type: 'CLEAR_ALL_OVERRIDES' })
+  sendOverride({ type: 'CLEAR_ALL_OVERRIDES' })
   state.overrides = {}
   expandedKey = null
   render()
 })
 
-// Request current state from background on open
-chrome.runtime.sendMessage({ type: 'GET_FLAGS' }, (response) => {
-  if (response) {
-    state = { flags: {}, overrides: {}, provider: null, transport: null, ...response }
-    render()
+const pollRefreshBtn = document.getElementById('poll-refresh-btn')
+pollRefreshBtn.addEventListener('click', () => reloadActiveTab(pollRefreshBtn))
+
+// Request current state — resolve the tab ourselves so background doesn't need
+// to track it, avoiding stale state from service worker restarts or async lag.
+getActiveTab((tab, windowId) => {
+  if (tab?.url) {
+    try {
+      const origin = new URL(tab.url).origin
+      searchStateKey = `fc:searchOpen:${origin}`
+      searchQueryKey = `fc:searchQuery:${origin}`
+    } catch (_) {}
   }
+  searchOpen  = localStorage.getItem(searchStateKey) === 'true'
+  searchQuery = localStorage.getItem(searchQueryKey) || ''
+
+  chrome.runtime.sendMessage({ type: 'GET_FLAGS', tabId: tab?.id || null, windowId: windowId || null }, (response) => {
+    if (response) {
+      state = { flags: {}, overrides: {}, provider: null, transport: null, ...response }
+      render()
+      applySearchOpen()
+      if (searchOpen) searchInput.focus()
+    }
+  })
 })
 
 // Listen for live updates while popup is open
@@ -299,5 +404,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     state.provider = msg.provider || state.provider
     state.transport = msg.transport || state.transport
     render()
+    applySearchOpen()
   }
 })

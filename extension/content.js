@@ -5,18 +5,18 @@
 // ── Page world → extension ────────────────────────────────────────────────
 
 window.addEventListener('message', (e) => {
-  if (!e.data || e.data.source !== 'ffd-inject') return
+  if (!e.data || e.data.source !== 'fc-inject') return
 
   // Extension context is invalidated when the extension reloads mid-page.
   // Stop trying to communicate — user must refresh the tab.
   if (!chrome.runtime?.id) return
 
   if (e.data.type === 'REQUEST_OVERRIDES') {
-    chrome.storage.local.get('ffd:overrides', (result) => {
+    chrome.storage.local.get('fc:overrides', (result) => {
       window.postMessage({
-        source: 'ffd-content',
+        source: 'fc-content',
         type: 'INIT_OVERRIDES',
-        overrides: result['ffd:overrides'] || {},
+        overrides: result['fc:overrides'] || {},
       }, '*')
     })
     return
@@ -30,6 +30,6 @@ window.addEventListener('message', (e) => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (['SET_OVERRIDE', 'CLEAR_OVERRIDE', 'CLEAR_ALL_OVERRIDES'].includes(msg.type)) {
-    window.postMessage({ source: 'ffd-content', ...msg }, '*')
+    window.postMessage({ source: 'fc-content', ...msg }, '*')
   }
 })

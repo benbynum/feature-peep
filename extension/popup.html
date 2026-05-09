@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flagtap</title>
+  <title>FeatureCreep</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
@@ -11,10 +11,15 @@
     <header>
       <div class="header-left">
         <span class="logo">🚩</span>
-        <span class="title">Flagtap</span>
+        <span class="title">FeatureCreep</span>
       </div>
       <div class="header-right">
         <span id="provider-badge" class="badge hidden"></span>
+        <button id="search-toggle" class="search-toggle hidden" aria-label="Search flags">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -32,11 +37,32 @@
     </div>
 
     <div id="state-flags" class="hidden">
-      <div class="toolbar">
-        <span id="override-count" class="override-count hidden"></span>
-        <button id="clear-all-btn" class="clear-all hidden">Clear all overrides</button>
+      <div id="search-bar" class="search-bar hidden">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="search-input" class="search-input" type="text" placeholder="Flag name" autocomplete="off" spellcheck="false" />
+        <button id="search-clear" class="search-clear hidden" aria-label="Clear search">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="poll-refresh-bar" class="poll-refresh-bar hidden">
+        <button id="poll-refresh-btn" class="poll-refresh-btn" title="Reload page to apply overrides">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
+        <span class="poll-refresh-hint">Polled flags require page refresh</span>
       </div>
       <ul id="flag-list"></ul>
+    </div>
+
+    <div id="toolbar" class="toolbar hidden">
+      <span id="override-count" class="override-count"></span>
+      <button id="clear-all-btn" class="clear-all">Clear all overrides</button>
     </div>
   </div>
   <script src="popup.js"></script>

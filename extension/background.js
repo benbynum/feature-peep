@@ -6,11 +6,16 @@ let focusSeq = 0  // Discard stale onFocusChanged callbacks when windows switch 
 
 chrome.windows.onFocusChanged.addListener((windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) return
-  activeWindowId = windowId
-  const seq = ++focusSeq
-  chrome.tabs.query({ active: true, windowId }, (tabs) => {
-    if (seq !== focusSeq) return  // A newer focus change came in — discard
-    if (tabs[0]) activeTabId = tabs[0].id
+  // Skip popup/extension windows (e.g. the extension popup itself) so activeTabId
+  // always points to a real browser tab, not a windowless popup context.
+  chrome.windows.get(windowId, (win) => {
+    if (chrome.runtime.lastError || win.type !== 'normal') return
+    activeWindowId = windowId
+    const seq = ++focusSeq
+    chrome.tabs.query({ active: true, windowId }, (tabs) => {
+      if (seq !== focusSeq) return
+      if (tabs[0]) activeTabId = tabs[0].id
+    })
   })
 })
 
@@ -30,44 +35,43 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return
   }
 
-  // GET_FLAGS from popup — always query fresh so popup open authoritatively resets activeTabId
+  // GET_FLAGS — tab ID resolved by the popup itself via getLastFocused,
+  // so background doesn't need to track window state at all.
   if (msg.type === 'GET_FLAGS') {
-    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        activeTabId = tabs[0].id
-        activeWindowId = tabs[0].windowId
-      }
-      sendResponse(tabState[activeTabId] || { flags: {}, overrides: {}, provider: null, transport: null })
-    })
-    return true  // Keep channel open for async sendResponse
+    if (msg.tabId) {
+      activeTabId = msg.tabId
+      if (msg.windowId) activeWindowId = msg.windowId
+    }
+    sendResponse(tabState[activeTabId] || { flags: {}, overrides: {}, provider: null, transport: null })
   }
 
   // Override commands from popup
   if (msg.type === 'SET_OVERRIDE') {
-    chrome.storage.local.get('ffd:overrides', (result) => {
-      const stored = result['ffd:overrides'] || {}
+    chrome.storage.local.get('fc:overrides', (result) => {
+      const stored = result['fc:overrides'] || {}
       stored[msg.key] = msg.value
-      chrome.storage.local.set({ 'ffd:overrides': stored })
+      chrome.storage.local.set({ 'fc:overrides': stored })
     })
     forwardToActiveTab(msg)
     return
   }
 
   if (msg.type === 'CLEAR_OVERRIDE') {
-    chrome.storage.local.get('ffd:overrides', (result) => {
-      const stored = result['ffd:overrides'] || {}
+    chrome.storage.local.get('fc:overrides', (result) => {
+      const stored = result['fc:overrides'] || {}
       delete stored[msg.key]
-      chrome.storage.local.set({ 'ffd:overrides': stored })
+      chrome.storage.local.set({ 'fc:overrides': stored })
     })
     forwardToActiveTab(msg)
     return
   }
 
   if (msg.type === 'CLEAR_ALL_OVERRIDES') {
-    chrome.storage.local.set({ 'ffd:overrides': {} })
+    chrome.storage.local.set({ 'fc:overrides': {} })
     forwardToActiveTab(msg)
     return
   }
+
 })
 
 function forwardToActiveTab(msg) {
