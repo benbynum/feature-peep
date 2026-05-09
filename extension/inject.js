@@ -237,7 +237,9 @@
     let requestUrl = ''
     const capturedSdkHandlers = []  // handlers registered via addEventListener after ours
     let onRscHandler = null         // handler assigned via xhr.onreadystatechange = fn
-    let onRscWired = false          // wrapper listener registered at most once
+    let onRscWired = false
+    let onLoadHandler = null        // handler assigned via xhr.onload = fn
+    let onLoadWired = false
 
     const originalOpen = xhr.open.bind(xhr)
     xhr.open = function (method, url, ...args) {
@@ -248,14 +250,13 @@
     // Capture handlers registered via addEventListener (after ours).
     const originalAddEventListener = xhr.addEventListener.bind(xhr)
     xhr.addEventListener = function (type, listener, options) {
-      if (type === 'readystatechange') capturedSdkHandlers.push(listener)
+      if (type === 'readystatechange' || type === 'load') capturedSdkHandlers.push(listener)
       return originalAddEventListener(type, listener, options)
     }
 
-    // Intercept onreadystatechange property assignment.
-    // When the SDK does `xhr.onreadystatechange = fn` we store fn and wire it
-    // as a regular event listener (via originalAddEventListener) so it fires
-    // after our own listener in registration order.
+    // Intercept onreadystatechange and onload property assignments.
+    // Wire each as a regular event listener so it fires after ours in
+    // registration order and is available for fake-put replay.
     Object.defineProperty(xhr, 'onreadystatechange', {
       get: () => onRscHandler,
       set: (fn) => {
@@ -264,6 +265,20 @@
           onRscWired = true
           originalAddEventListener('readystatechange', function () {
             if (onRscHandler) onRscHandler.call(xhr)
+          })
+        }
+      },
+      configurable: true,
+    })
+
+    Object.defineProperty(xhr, 'onload', {
+      get: () => onLoadHandler,
+      set: (fn) => {
+        onLoadHandler = fn
+        if (fn && !onLoadWired) {
+          onLoadWired = true
+          originalAddEventListener('load', function () {
+            if (onLoadHandler) onLoadHandler.call(xhr)
           })
         }
       },
@@ -283,9 +298,12 @@
         setDetected(p.id, 'polling')
         currentFlags = data
 
-        // Collect all SDK handlers for fake-put replay
+        // Collect all SDK handlers (readystatechange + load, both mechanisms)
         const sdkFns = [...capturedSdkHandlers]
         if (onRscHandler) sdkFns.push(onRscHandler)
+        if (onLoadHandler) sdkFns.push(onLoadHandler)
+        log('XHR: captured handlers — addEventListener=%d onrsc=%s onload=%s',
+          capturedSdkHandlers.length, !!onRscHandler, !!onLoadHandler)
         if (sdkFns.length > 0) {
           sdkPollingHandlers.push({ xhr, fns: sdkFns })
           log('XHR: stored %d SDK handler(s) for polling fake-put', sdkFns.length)
