@@ -7,23 +7,22 @@
   let detectedProvider = null
   let detectedTransport = null
 
-  // SSE only — stores SDK put listeners for fake event replay on override
+  // Monotonically increasing version bump applied to every XHR patch or fake put.
+  // Ensures each push to the SDK has a strictly higher version than the last,
+  // so the SDK's change-detection (newVersion > storedVersion) always fires.
+  let pollBump = 0
+
+  // SSE — stores SDK put listeners for fake event replay on override
   const sdkPutListeners = []
 
-  // Polling: track which setTimeout is the flag poll timer.
-  // After a successful flag-PUT XHR response, the SDK schedules its next poll
-  // via setTimeout. We mark the next captured ≥15s timeout as the flag poll
-  // timer so triggerImmediatePoll only triggers THAT one, not unrelated timers
-  // (e.g. LD's 15-min diagnostic event flusher).
-  let expectingFlagPollTimer = false
-  let flagPollTimerKey = null
+  // Polling — stores the SDK's readystatechange handlers from the evalx XHR
+  // so we can replay them directly (analogous to SSE fake-put) instead of
+  // waiting for the next natural poll.
+  const sdkPollingHandlers = []  // { xhr, fns: [fn, ...] }
 
   log('loaded')
 
   // ─── Provider + URL detection ─────────────────────────────────────────────
-  //
-  // Tier 1: exact LD hostnames
-  // Tier 2: relay proxy — match path patterns regardless of host
 
   function detectProvider(url) {
     try {
@@ -57,7 +56,10 @@
     return vals.length > 0 && typeof vals[0] === 'object' && vals[0] !== null && 'version' in vals[0]
   }
 
+  // Applies current overrides to a flag map. bumpVersion increments pollBump
+  // so the SDK's version comparison sees this as newer than what it last stored.
   function applyOverrides(flags, bumpVersion = false) {
+    if (bumpVersion) ++pollBump
     const result = {}
     for (const key of Object.keys(flags)) {
       if (overrides[key] !== undefined) {
@@ -66,8 +68,8 @@
           ...flag,
           value: overrides[key],
           ...(bumpVersion ? {
-            version: (flag.version || 0) + 1,
-            ...(flag.flagVersion !== undefined ? { flagVersion: flag.flagVersion + 1 } : {}),
+            version: (flag.version || 0) + pollBump,
+            ...(flag.flagVersion !== undefined ? { flagVersion: flag.flagVersion + pollBump } : {}),
           } : {}),
         }
       } else {
@@ -93,7 +95,7 @@
     detectedTransport = transport
   }
 
-  // ─── SSE: fake put replay for immediate override feedback ─────────────────
+  // ─── SSE: fake put replay ─────────────────────────────────────────────────
 
   function fireFakePut() {
     log('fireFakePut: listeners=%d, flags=%d', sdkPutListeners.length, Object.keys(currentFlags).length)
@@ -106,95 +108,54 @@
     notifyExtension(currentFlags, overrides)
   }
 
-  // ─── Timer interceptors (force-poll on override) ──────────────────────────
+  // ─── Polling: fake XHR response replay ───────────────────────────────────
   //
-  // Captures setInterval and recursive setTimeout so we can trigger the SDK's
-  // polling callback immediately on override changes.
-  //
-  // IMPORTANT: triggerImmediatePoll snapshots capturedPollers before iterating.
-  // Without a snapshot, V8's Map iterator picks up entries added during the
-  // loop (the fn() schedules its next timeout), causing an infinite loop.
+  // The LD SDK makes one evalx XHR at startup. Subsequent polls use a mechanism
+  // we can't intercept via timers (the 15-min timer is the diagnostic flush, not
+  // the flag poll). Instead we store the SDK's readystatechange handlers from
+  // the initial evalx XHR and re-invoke them directly with patched data —
+  // exactly like SSE fake-put but for XHR.
 
-  const OriginalSetInterval = window.setInterval
-  const OriginalClearInterval = window.clearInterval
-  const OriginalSetTimeout = window.setTimeout
-  const OriginalClearTimeout = window.clearTimeout
+  function firePollingFakePut() {
+    log('firePollingFakePut: handlers=%d, flags=%d', sdkPollingHandlers.length, Object.keys(currentFlags).length)
+    if (sdkPollingHandlers.length === 0 || Object.keys(currentFlags).length === 0) return
 
-  const capturedPollers = new Map()  // key → { call, type, nativeId? }
-  let timeoutSeq = 0
-
-  window.setInterval = function (fn, delay, ...args) {
-    const id = OriginalSetInterval.call(this, fn, delay, ...args)
-    if (typeof fn === 'function' && typeof delay === 'number' && delay >= 15000) {
-      capturedPollers.set('i:' + id, { call: () => fn(...args), type: 'interval' })
-      log('setInterval captured: delay=%dms, total pollers=%d', delay, capturedPollers.size)
-    }
-    return id
-  }
-
-  window.clearInterval = function (id) {
-    if (capturedPollers.delete('i:' + id)) {
-      log('setInterval cleared: id=%d', id)
-    }
-    return OriginalClearInterval.call(this, id)
-  }
-
-  window.setTimeout = function (fn, delay, ...args) {
-    if (typeof fn === 'function' && typeof delay === 'number' && delay >= 15000) {
-      const key = 't:' + (++timeoutSeq)
-      let nativeId
-      // Wrap to auto-clean from capturedPollers when the timeout fires naturally
-      const wrapped = (...a) => {
-        capturedPollers.delete(key)
-        fn(...a)
-      }
-      nativeId = OriginalSetTimeout.call(this, wrapped, delay, ...args)
-      const isFlagPoll = expectingFlagPollTimer
-      if (isFlagPoll) { flagPollTimerKey = key; expectingFlagPollTimer = false }
-      capturedPollers.set(key, { call: () => fn(...args), type: 'timeout', nativeId, key, isFlagPoll, delay })
-      log('setTimeout captured: delay=%dms, key=%s, isFlagPoll=%s, total pollers=%d', delay, key, isFlagPoll, capturedPollers.size)
-      return nativeId
-    }
-    return OriginalSetTimeout.call(this, fn, delay, ...args)
-  }
-
-  window.clearTimeout = function (id) {
-    for (const [key, entry] of capturedPollers.entries()) {
-      if (entry.type === 'timeout' && entry.nativeId === id) {
-        capturedPollers.delete(key)
-        if (key === flagPollTimerKey) flagPollTimerKey = null
-        log('clearTimeout removed poller: key=%s', key)
-        break
+    ++pollBump
+    // Bump ALL flags so the SDK sees every flag as "newer", even ones being
+    // restored to their original value (e.g. after CLEAR_OVERRIDE).
+    const modified = {}
+    for (const key of Object.keys(currentFlags)) {
+      const flag = currentFlags[key]
+      modified[key] = {
+        ...flag,
+        value: overrides[key] !== undefined ? overrides[key] : flag.value,
+        version: (flag.version || 0) + pollBump,
+        ...(flag.flagVersion !== undefined ? { flagVersion: flag.flagVersion + pollBump } : {}),
       }
     }
-    return OriginalClearTimeout.call(this, id)
+    const modifiedJson = JSON.stringify(modified)
+    log('firePollingFakePut: bump=%d  overrides=%d', pollBump, Object.keys(overrides).length)
+
+    const { xhr, fns } = sdkPollingHandlers[sdkPollingHandlers.length - 1]
+    Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
+    Object.defineProperty(xhr, 'response', {
+      get: function () { return xhr.responseType === 'json' ? modified : modifiedJson },
+      configurable: true,
+    })
+
+    for (const fn of fns) {
+      try { fn.call(xhr) } catch (e) { log('firePollingFakePut: handler error %o', e) }
+    }
+    notifyExtension(currentFlags, overrides)
   }
 
-  function triggerImmediatePoll() {
-    log('triggerImmediatePoll: flagPollTimerKey=%s, capturedPollers=%d', flagPollTimerKey, capturedPollers.size)
-    const entry = flagPollTimerKey ? capturedPollers.get(flagPollTimerKey) : null
-    if (!entry) {
-      log('triggerImmediatePoll: no flag poll timer identified — override applies on next natural poll')
-      return
-    }
-    const key = flagPollTimerKey
-    // Reschedule at 1s instead of calling directly. The SDK's poll fn fires via
-    // its own code path, making the XHR naturally (overrides applied by our
-    // interceptor). Avoids side effects of calling it synchronously (e.g.
-    // diagnostic event flushes that run as part of the same callback).
-    log('triggerImmediatePoll: rescheduling %s to fire in 1s (was %dms)', key, entry.delay)
-    OriginalClearTimeout.call(window, entry.nativeId)
-    capturedPollers.delete(key)
-    flagPollTimerKey = null
-    OriginalSetTimeout.call(window, entry.call, 1000)
-    // 1s delay is below our capture threshold so no re-capture / infinite loop
-  }
+  // ─── applyOverrideImmediate ───────────────────────────────────────────────
 
   function applyOverrideImmediate() {
-    log('applyOverrideImmediate: transport=%s, pollers=%d, sseListeners=%d',
-      detectedTransport, capturedPollers.size, sdkPutListeners.length)
+    log('applyOverrideImmediate: transport=%s, pollingHandlers=%d, sseListeners=%d',
+      detectedTransport, sdkPollingHandlers.length, sdkPutListeners.length)
     if (detectedTransport === 'sse') fireFakePut()
-    else if (detectedTransport === 'polling') triggerImmediatePoll()
+    else if (detectedTransport === 'polling') firePollingFakePut()
   }
 
   // ─── Message bridge ───────────────────────────────────────────────────────
@@ -230,10 +191,7 @@
 
   window.fetch = async function (input, init) {
     const url = input instanceof Request ? input.url : String(input)
-    const isLD = url.includes('launchdarkly') || detectProvider(url) !== null
-    if (isLD) log('fetch: → %s', url.split('?')[0])
     const response = await OriginalFetch.call(this, input, init)
-    if (isLD) log('fetch: ← %s  status=%d  ok=%s', url.split('?')[0], response.status, response.ok)
 
     const p = detectProvider(url)
     if (!p || p.transport !== 'polling' || !response.ok) return response
@@ -247,7 +205,7 @@
         setDetected(p.id, 'polling')
         currentFlags = data
         notifyExtension(data, overrides)
-        const modified = applyOverrides(data)
+        const modified = applyOverrides(data, true)
         return new Response(JSON.stringify(modified), {
           status: response.status,
           statusText: response.statusText,
@@ -265,74 +223,62 @@
 
   // ─── XHR interceptor (polling) ────────────────────────────────────────────
   //
-  // Our readystatechange listener is registered in the constructor, before the
-  // SDK adds its own listener. When state 4 arrives and it's a flag PUT, we
-  // shadow responseText/response on the XHR instance via Object.defineProperty
-  // so the SDK's listener reads the override-applied values.
+  // Two responsibilities:
+  // 1. Patch the initial evalx XHR response so overrides already in storage
+  //    apply immediately on page load (works because we register our
+  //    readystatechange listener before the SDK registers its own).
+  // 2. Capture the SDK's readystatechange handler(s) so firePollingFakePut
+  //    can replay them later without a new network round-trip.
 
   const OriginalXHR = window.XMLHttpRequest
 
   window.XMLHttpRequest = function () {
     const xhr = new OriginalXHR()
-    log('XHR: new instance')
     let requestUrl = ''
+    const capturedSdkHandlers = []  // readystatechange handlers registered after ours
 
     const originalOpen = xhr.open.bind(xhr)
     xhr.open = function (method, url, ...args) {
       requestUrl = typeof url === 'string' ? url : String(url)
-      log('XHR open: %s %s', method, requestUrl.split('?')[0])
       return originalOpen(method, url, ...args)
     }
 
-    // Registered first — fires before SDK's listener
-    xhr.addEventListener('readystatechange', function () {
+    // Override addEventListener to capture SDK's readystatechange handlers.
+    // Our own handler is registered via originalAddEventListener (below) so
+    // it does NOT appear in capturedSdkHandlers.
+    const originalAddEventListener = xhr.addEventListener.bind(xhr)
+    xhr.addEventListener = function (type, listener, options) {
+      if (type === 'readystatechange') capturedSdkHandlers.push(listener)
+      return originalAddEventListener(type, listener, options)
+    }
+
+    // Registered first — fires before the SDK's listener
+    originalAddEventListener('readystatechange', function () {
       if (xhr.readyState !== 4 || xhr.status !== 200) return
       const p = detectProvider(requestUrl)
       if (!p || p.transport !== 'polling') return
-      log('XHR: polling URL matched (%s) → %s', p.id, requestUrl.split('?')[0])
       try {
         const data = JSON.parse(xhr.responseText)
-        if (!isLDPut(data)) {
-          log('XHR: isLDPut ✗')
-          return
-        }
-        log('XHR: isLDPut ✓, %d flags — patching responseText', Object.keys(data).length)
+        if (!isLDPut(data)) return
+        log('XHR: isLDPut ✓, %d flags', Object.keys(data).length)
         setDetected(p.id, 'polling')
         currentFlags = data
+
+        // Store SDK's handlers for future fake-put replay
+        if (capturedSdkHandlers.length > 0) {
+          sdkPollingHandlers.push({ xhr, fns: [...capturedSdkHandlers] })
+          log('XHR: stored %d SDK handler(s) for polling fake-put', capturedSdkHandlers.length)
+        }
+
         const modified = applyOverrides(data, true)
         const modifiedJson = JSON.stringify(modified)
-        // Log patch details for any overridden flags so we can verify version bumps
-        for (const k of Object.keys(overrides)) {
-          if (data[k] && modified[k]) {
-            log('XHR: patching %s: value %o→%o  version %d→%d  flagVersion %o→%o  responseType=%s',
-              k, data[k].value, modified[k].value,
-              data[k].version, modified[k].version,
-              data[k].flagVersion, modified[k].flagVersion,
-              xhr.responseType || '(empty)')
-          }
-        }
-        // Shadow native responseText/response so SDK's listener reads patched values.
-        // response getter checks responseType: if 'json', SDK expects a parsed object.
         Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
-        Object.defineProperty(xhr, 'response', { get: function() { return xhr.responseType === 'json' ? modified : modifiedJson }, configurable: true })
-        // Verify the shadow actually works (own property overrides prototype getter)
-        log('XHR: shadow verify — responseText matches? %s  responseType=%s', xhr.responseText === modifiedJson, xhr.responseType || '(empty)')
+        Object.defineProperty(xhr, 'response', {
+          get: function () { return xhr.responseType === 'json' ? modified : modifiedJson },
+          configurable: true,
+        })
+        log('XHR: patched responseText (bump=%d)', pollBump)
         notifyExtension(data, overrides)
-        // Flag the next ≥15s setTimeout as the poll timer (SDK schedules after XHR in some versions)
-        expectingFlagPollTimer = true
-        // Retroactive: SDK schedules the poll timer BEFORE the XHR in some versions.
-        // If we haven't identified the flag poll timer yet, pick the shortest-delay
-        // captured timer — it's most likely the flag poll, not a diagnostics flush.
-        if (!flagPollTimerKey && capturedPollers.size > 0) {
-          let minDelay = Infinity, minKey = null
-          for (const [k, entry] of capturedPollers.entries()) {
-            if (entry.delay < minDelay) { minDelay = entry.delay; minKey = k }
-          }
-          if (minKey) {
-            flagPollTimerKey = minKey
-            log('XHR: retroactively identified flag poll timer: %s (delay=%dms)', minKey, minDelay)
-          }
-        }
       } catch (err) {
         log('XHR: error %o', err)
       }
