@@ -176,7 +176,7 @@ window.EventSource = function (url, init) {
       return
     }
 
-    if (type === 'put') provider.registerPutListener(listener)
+    provider.registerListener?.(type, listener)
 
     originalAEL(type, (e) => {
       try {

@@ -2,6 +2,7 @@ import { log } from '../log.js'
 
 export function create() {
   let hooked = false
+  const snapshotListeners = []
 
   return {
     id: 'openfeature',
@@ -74,11 +75,29 @@ export function create() {
       return true
     },
 
-    registerPutListener() {},
+    registerListener(type, listener) {
+      if (type === 'flags-snapshot') {
+        snapshotListeners.push(listener)
+        log('OpenFeature: flags-snapshot listener registered, total=%d', snapshotListeners.length)
+      }
+    },
 
-    // No SSE replay for OF — evaluation hooks return overrides on the next call.
-    // Just fire notify() so the popup stays in sync with the current override state.
+    // Replay a fake flags-snapshot with overrides applied so the OFREP provider
+    // picks up the changes immediately without waiting for the next SSE message.
     fireFakePut(currentFlags, overrides, notifyFn) {
+      log('fireFakePut (OF): listeners=%d, flags=%d', snapshotListeners.length, Object.keys(currentFlags).length)
+      if (snapshotListeners.length === 0 || Object.keys(currentFlags).length === 0) {
+        notifyFn()
+        return
+      }
+      const payload = Object.entries(currentFlags).map(([key, flag]) => {
+        const value = key in overrides ? overrides[key] : flag.value
+        return { key, value, reason: 'STATIC', variant: String(value) }
+      })
+      const fakeEvent = new MessageEvent('flags-snapshot', { data: JSON.stringify(payload) })
+      for (const listener of snapshotListeners) {
+        try { listener(fakeEvent) } catch (err) { log('fireFakePut listener error: %o', err) }
+      }
       notifyFn()
     },
 

@@ -72,9 +72,11 @@
         }
         return result;
       },
-      registerPutListener(listener) {
-        putListeners.push(listener);
-        log("EventSource: put listener registered, total=%d", putListeners.length);
+      registerListener(type, listener) {
+        if (type === "put") {
+          putListeners.push(listener);
+          log("EventSource: put listener registered, total=%d", putListeners.length);
+        }
       },
       fireFakePut(currentFlags2, overrides2, notifyFn) {
         log("fireFakePut: listeners=%d, flags=%d", putListeners.length, Object.keys(currentFlags2).length);
@@ -129,6 +131,7 @@
   // src/inject/providers/openfeature.js
   function create2() {
     let hooked = false;
+    const snapshotListeners = [];
     return {
       id: "openfeature",
       isPayload: () => false,
@@ -189,11 +192,32 @@
         log("OpenFeature: client hooked (%d methods patched)", valueMethods.length + detailsMethods.length);
         return true;
       },
-      registerPutListener() {
+      registerListener(type, listener) {
+        if (type === "flags-snapshot") {
+          snapshotListeners.push(listener);
+          log("OpenFeature: flags-snapshot listener registered, total=%d", snapshotListeners.length);
+        }
       },
-      // No SSE replay for OF — evaluation hooks return overrides on the next call.
-      // Just fire notify() so the popup stays in sync with the current override state.
+      // Replay a fake flags-snapshot with overrides applied so the OFREP provider
+      // picks up the changes immediately without waiting for the next SSE message.
       fireFakePut(currentFlags2, overrides2, notifyFn) {
+        log("fireFakePut (OF): listeners=%d, flags=%d", snapshotListeners.length, Object.keys(currentFlags2).length);
+        if (snapshotListeners.length === 0 || Object.keys(currentFlags2).length === 0) {
+          notifyFn();
+          return;
+        }
+        const payload = Object.entries(currentFlags2).map(([key, flag]) => {
+          const value = key in overrides2 ? overrides2[key] : flag.value;
+          return { key, value, reason: "STATIC", variant: String(value) };
+        });
+        const fakeEvent = new MessageEvent("flags-snapshot", { data: JSON.stringify(payload) });
+        for (const listener of snapshotListeners) {
+          try {
+            listener(fakeEvent);
+          } catch (err) {
+            log("fireFakePut listener error: %o", err);
+          }
+        }
         notifyFn();
       },
       // Matnaw event names + standard OFREP spec names + LD-style fallbacks
@@ -397,7 +421,7 @@
         originalAEL(type, listener, options);
         return;
       }
-      if (type === "put") provider.registerPutListener(listener);
+      provider.registerListener?.(type, listener);
       originalAEL(type, (e) => {
         try {
           const raw = JSON.parse(e.data);

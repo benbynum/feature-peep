@@ -47,9 +47,11 @@ export function create() {
       return result
     },
 
-    registerPutListener(listener) {
-      putListeners.push(listener)
-      log('EventSource: put listener registered, total=%d', putListeners.length)
+    registerListener(type, listener) {
+      if (type === 'put') {
+        putListeners.push(listener)
+        log('EventSource: put listener registered, total=%d', putListeners.length)
+      }
     },
 
     fireFakePut(currentFlags, overrides, notifyFn) {
