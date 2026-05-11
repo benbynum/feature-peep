@@ -82,7 +82,32 @@ export function create() {
       notifyFn()
     },
 
-    handleSSEPut: () => null,
-    handleSSEPatch: () => ({ patched: false }),
+    // OFREP SSE event types (OpenFeature Remote Evaluation Protocol).
+    // provider_ready = full flag state (like LD's put)
+    // configuration_change = partial update (like LD's patch)
+    sseEventTypes: new Set(['provider_ready', 'configuration_change']),
+
+    processSSEEvent(type, raw, currentFlags, overrides) {
+      if (type === 'provider_ready') {
+        if (!raw.flags || typeof raw.flags !== 'object') return null
+        const normalized = {}
+        for (const [key, flag] of Object.entries(raw.flags)) {
+          normalized[key] = { value: flag.value, version: flag.flagVersion || 0 }
+        }
+        log('OFREP provider_ready: %d flags', Object.keys(normalized).length)
+        // Pass through original event — the provider reads it directly; overrides
+        // are handled by evaluation hooks, not by modifying the SSE stream.
+        return { flags: normalized, proxyData: null, flagsChanged: true }
+      }
+      if (type === 'configuration_change') {
+        if (!raw.flags || typeof raw.flags !== 'object') return null
+        for (const [key, flag] of Object.entries(raw.flags)) {
+          currentFlags[key] = { value: flag.value, version: flag.flagVersion || 0 }
+        }
+        log('OFREP configuration_change: %d flags updated', Object.keys(raw.flags).length)
+        return { flagsChanged: true, proxyData: null }
+      }
+      return null
+    },
   }
 }

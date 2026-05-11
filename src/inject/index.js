@@ -171,7 +171,7 @@ window.EventSource = function (url, init) {
   if (!provider) return es
 
   es.addEventListener = function (type, listener, options) {
-    if (type !== 'put' && type !== 'patch' && type !== 'message') {
+    if (!provider.sseEventTypes.has(type)) {
       originalAEL(type, listener, options)
       return
     }
@@ -181,29 +181,18 @@ window.EventSource = function (url, init) {
     originalAEL(type, (e) => {
       try {
         const raw = JSON.parse(e.data)
-
-        if (type === 'put') {
-          const modified = provider.handleSSEPut(raw, overrides)
-          if (modified !== null) {
+        const result = provider.processSSEEvent(type, raw, currentFlags, overrides)
+        if (result) {
+          if (result.flags) currentFlags = result.flags
+          if (result.flagsChanged) {
             setDetected(detected.id, 'sse')
-            log('EventSource put: %d flags, provider=%s', Object.keys(raw).length, detected.id)
-            currentFlags = raw
+            log('EventSource %s: %d flags, provider=%s', type, Object.keys(currentFlags).length, detected.id)
             notify()
-            const proxied = Object.create(e, { data: { value: JSON.stringify(modified) } })
+          }
+          if (result.proxyData != null) {
+            const proxied = Object.create(e, { data: { value: result.proxyData } })
             listener(proxied)
             return
-          }
-        }
-
-        if (type === 'patch') {
-          const result = provider.handleSSEPatch(raw, currentFlags, overrides)
-          if (result.patched) {
-            notify()
-            if (result.overrideData) {
-              const proxied = Object.create(e, { data: { value: JSON.stringify(result.overrideData) } })
-              listener(proxied)
-              return
-            }
           }
         }
       } catch (_) {}

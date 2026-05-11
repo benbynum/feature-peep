@@ -17,6 +17,13 @@ export function detectProvider(url) {
     if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
       return { id: 'launchdarkly', transport: 'sse' }
     }
+    // OFREP (OpenFeature Remote Evaluation Protocol)
+    if (/\/ofrep\/v1\/sse/.test(path)) {
+      return { id: 'openfeature', transport: 'sse' }
+    }
+    if (/\/ofrep\/v1\//.test(path)) {
+      return { id: 'openfeature', transport: 'polling' }
+    }
   } catch (_) {}
   return null
 }

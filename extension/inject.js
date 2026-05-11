@@ -20,6 +20,12 @@
       if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
         return { id: "launchdarkly", transport: "sse" };
       }
+      if (/\/ofrep\/v1\/sse/.test(path)) {
+        return { id: "openfeature", transport: "sse" };
+      }
+      if (/\/ofrep\/v1\//.test(path)) {
+        return { id: "openfeature", transport: "polling" };
+      }
     } catch (_) {
     }
     return null;
@@ -84,32 +90,38 @@
         }
         notifyFn();
       },
-      // Returns the overridden flag map to send to the SDK, or null if not an LD payload.
-      handleSSEPut(raw, overrides2) {
-        if (!isPayload(raw)) return null;
-        return applySSEOverrides(raw, overrides2);
-      },
-      // Mutates currentFlags with the patched flag. Returns whether a patch was
-      // recognized and, if an override is active, the modified event data to proxy.
-      handleSSEPatch(raw, currentFlags2, overrides2) {
-        let key, updated;
-        if (raw.key && raw.value !== void 0) {
-          key = raw.key;
-          updated = raw;
-        } else if (raw.path && raw.data) {
-          key = raw.path.replace(/^\/flags\//, "");
-          updated = raw.data;
+      sseEventTypes: /* @__PURE__ */ new Set(["put", "patch", "message"]),
+      // Unified SSE event handler. Returns null for unrecognized events (passthrough).
+      // { flags }     → replace currentFlags with this value
+      // { proxyData } → proxy this JSON string to the SDK instead of the original event
+      // { flagsChanged } → call notify() and setDetected
+      processSSEEvent(type, raw, currentFlags2, overrides2) {
+        if (type === "put") {
+          if (!isPayload(raw)) return null;
+          const modified = applySSEOverrides(raw, overrides2);
+          return { flags: raw, proxyData: JSON.stringify(modified), flagsChanged: true };
         }
-        if (!key || !updated) return { patched: false };
-        log("EventSource patch: %s", key);
-        currentFlags2[key] = updated;
-        if (key in overrides2) {
-          const patchedOverride = { ...raw };
-          if (raw.key) patchedOverride.value = overrides2[key];
-          else if (raw.path) patchedOverride.data = { ...updated, value: overrides2[key] };
-          return { patched: true, overrideData: patchedOverride };
+        if (type === "patch") {
+          let key, updated;
+          if (raw.key && raw.value !== void 0) {
+            key = raw.key;
+            updated = raw;
+          } else if (raw.path && raw.data) {
+            key = raw.path.replace(/^\/flags\//, "");
+            updated = raw.data;
+          }
+          if (!key || !updated) return null;
+          log("EventSource patch: %s", key);
+          currentFlags2[key] = updated;
+          if (key in overrides2) {
+            const patchedOverride = { ...raw };
+            if (raw.key) patchedOverride.value = overrides2[key];
+            else if (raw.path) patchedOverride.data = { ...updated, value: overrides2[key] };
+            return { flagsChanged: true, proxyData: JSON.stringify(patchedOverride) };
+          }
+          return { flagsChanged: true, proxyData: null };
         }
-        return { patched: true, overrideData: null };
+        return null;
       }
     };
   }
@@ -184,8 +196,30 @@
       fireFakePut(currentFlags2, overrides2, notifyFn) {
         notifyFn();
       },
-      handleSSEPut: () => null,
-      handleSSEPatch: () => ({ patched: false })
+      // OFREP SSE event types (OpenFeature Remote Evaluation Protocol).
+      // provider_ready = full flag state (like LD's put)
+      // configuration_change = partial update (like LD's patch)
+      sseEventTypes: /* @__PURE__ */ new Set(["provider_ready", "configuration_change"]),
+      processSSEEvent(type, raw, currentFlags2, overrides2) {
+        if (type === "provider_ready") {
+          if (!raw.flags || typeof raw.flags !== "object") return null;
+          const normalized = {};
+          for (const [key, flag] of Object.entries(raw.flags)) {
+            normalized[key] = { value: flag.value, version: flag.flagVersion || 0 };
+          }
+          log("OFREP provider_ready: %d flags", Object.keys(normalized).length);
+          return { flags: normalized, proxyData: null, flagsChanged: true };
+        }
+        if (type === "configuration_change") {
+          if (!raw.flags || typeof raw.flags !== "object") return null;
+          for (const [key, flag] of Object.entries(raw.flags)) {
+            currentFlags2[key] = { value: flag.value, version: flag.flagVersion || 0 };
+          }
+          log("OFREP configuration_change: %d flags updated", Object.keys(raw.flags).length);
+          return { flagsChanged: true, proxyData: null };
+        }
+        return null;
+      }
     };
   }
 
@@ -323,7 +357,7 @@
     }
     if (!provider) return es;
     es.addEventListener = function(type, listener, options) {
-      if (type !== "put" && type !== "patch" && type !== "message") {
+      if (!provider.sseEventTypes.has(type)) {
         originalAEL(type, listener, options);
         return;
       }
@@ -331,27 +365,18 @@
       originalAEL(type, (e) => {
         try {
           const raw = JSON.parse(e.data);
-          if (type === "put") {
-            const modified = provider.handleSSEPut(raw, overrides);
-            if (modified !== null) {
+          const result = provider.processSSEEvent(type, raw, currentFlags, overrides);
+          if (result) {
+            if (result.flags) currentFlags = result.flags;
+            if (result.flagsChanged) {
               setDetected(detected.id, "sse");
-              log("EventSource put: %d flags, provider=%s", Object.keys(raw).length, detected.id);
-              currentFlags = raw;
+              log("EventSource %s: %d flags, provider=%s", type, Object.keys(currentFlags).length, detected.id);
               notify();
-              const proxied = Object.create(e, { data: { value: JSON.stringify(modified) } });
+            }
+            if (result.proxyData != null) {
+              const proxied = Object.create(e, { data: { value: result.proxyData } });
               listener(proxied);
               return;
-            }
-          }
-          if (type === "patch") {
-            const result = provider.handleSSEPatch(raw, currentFlags, overrides);
-            if (result.patched) {
-              notify();
-              if (result.overrideData) {
-                const proxied = Object.create(e, { data: { value: JSON.stringify(result.overrideData) } });
-                listener(proxied);
-                return;
-              }
             }
           }
         } catch (_) {
