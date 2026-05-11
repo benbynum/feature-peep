@@ -98,6 +98,7 @@ header {
 img.provider-logo {
   width: auto;
   height: 12px;
+  margin-top: 4px;
 }
 
 .provider-name {
