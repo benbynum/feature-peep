@@ -5,7 +5,7 @@
 *.mov
 *.mp4
 *.gif
-!flagtap-demo-hq.gif
+!feature-creep-demo-hq.gif
 launchdarkly.png
 
 # Plans and requirements — track only latest versions

@@ -1,4 +1,4 @@
-# Flagtap — Project Plan
+# FeatureCreep — Project Plan
 
 **Version:** 0.13.0
 **Date:** 2026-05-09
@@ -145,7 +145,7 @@ OpenFeature hook injection is a separate transport type entirely (no URL matchin
 
 ## Open Questions
 
-- [ ] **Polling interval behavior** — LD polls every 30s by default. Should Flagtap show a "last updated" timestamp so the user knows the data might be stale?
+- [ ] **Polling interval behavior** — LD polls every 30s by default. Should FeatureCreep show a "last updated" timestamp so the user knows the data might be stale?
 - [ ] **Relay proxy path ambiguity** — if the user's relay is behind a path like `/api/ld/sdk/evalx/...`, Tier 2 regex may not match. Tier 3 (custom URLs) is the fallback.
 - [ ] **Transport display** — show in badge as `LaunchDarkly · polling` or just an icon indicator?
 - [ ] **options_page timing** — build options page as part of Phase 2 or wait until a second provider needs it?

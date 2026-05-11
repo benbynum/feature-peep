@@ -1,12 +1,12 @@
-# Flagtap
+# FeatureCreep
 
 Inspect and override feature flags without touching your app or environment config.
 
-![Flagtap demo](flagtap-demo-hq.gif)
+![FeatureCreep demo](feature-creep-demo-hq.gif)
 
 ## Why it exists
 
-At my last company we had 100+ flags across 5 environments and 40 engineers. Changing a flag to test something meant risking someone else's environment or breaking CI. Flagtap fixes that!
+At my last company we had 100+ flags across 5 environments and 40 engineers. Changing a flag to test something meant risking someone else's environment or breaking CI. FeatureCreep fixes that!
 
 - See which flags are active on any page, any env, instantly
 - Reproduce bugs that only appear in a specific flag state
