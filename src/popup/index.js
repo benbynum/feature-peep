@@ -1,4 +1,5 @@
 import { meta as ldMeta } from './providers/launchdarkly.js'
+import { meta as ofMeta } from './providers/openfeature.js'
 
 let state = { flags: {}, overrides: {}, provider: null, transport: null }
 let expandedKey = null
@@ -10,6 +11,7 @@ let searchQueryKey  = 'fc:searchQuery'
 
 const PROVIDERS = {
   [ldMeta.id]: ldMeta,
+  [ofMeta.id]: ofMeta,
 }
 
 const TRANSPORT_ICONS = {
@@ -21,7 +23,10 @@ function providerBadgeHTML(provider, transport) {
   const p = PROVIDERS[provider]
   const transportLabel = transport === 'sse' ? 'streaming' : transport === 'polling' ? 'polling' : 'detected'
   const transportIcon = TRANSPORT_ICONS[transport] || ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`
+  const logoHTML = p.imageSrc
+    ? `<img src="${p.imageSrc}" class="provider-logo" aria-hidden="true" />`
+    : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg>`
+  return `${logoHTML}<span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -91,6 +96,8 @@ function render() {
   emptyEl.classList.add('hidden')
   flagsEl.classList.remove('hidden')
   const provider = state.provider || 'launchdarkly'
+  const providerMeta = PROVIDERS[provider]
+  badgeEl.classList.toggle('badge--light', !!providerMeta?.lightBadge)
   badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
   badgeEl.classList.remove('hidden')
 

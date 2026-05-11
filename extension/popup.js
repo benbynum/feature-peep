@@ -8,6 +8,14 @@
     viewBox: "0 0 320 320"
   };
 
+  // src/popup/providers/openfeature.js
+  var meta2 = {
+    id: "openfeature",
+    name: "OpenFeature",
+    imageSrc: "openfeature.png",
+    lightBadge: true
+  };
+
   // src/popup/index.js
   var state = { flags: {}, overrides: {}, provider: null, transport: null };
   var expandedKey = null;
@@ -17,7 +25,8 @@
   var searchStateKey = "fc:searchOpen";
   var searchQueryKey = "fc:searchQuery";
   var PROVIDERS = {
-    [meta.id]: meta
+    [meta.id]: meta,
+    [meta2.id]: meta2
   };
   var TRANSPORT_ICONS = {
     polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,
@@ -27,7 +36,8 @@
     const p = PROVIDERS[provider];
     const transportLabel = transport === "sse" ? "streaming" : transport === "polling" ? "polling" : "detected";
     const transportIcon = TRANSPORT_ICONS[transport] || "";
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg><span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`;
+    const logoHTML = p.imageSrc ? `<img src="${p.imageSrc}" class="provider-logo" aria-hidden="true" />` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg>`;
+    return `${logoHTML}<span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`;
   }
   function inferType(value) {
     if (typeof value === "boolean") return "boolean";
@@ -81,6 +91,8 @@
     emptyEl.classList.add("hidden");
     flagsEl.classList.remove("hidden");
     const provider = state.provider || "launchdarkly";
+    const providerMeta = PROVIDERS[provider];
+    badgeEl.classList.toggle("badge--light", !!providerMeta?.lightBadge);
     badgeEl.innerHTML = providerBadgeHTML(provider, state.transport);
     badgeEl.classList.remove("hidden");
     if (overrideCount > 0) {

@@ -1,13 +1,14 @@
 import { log } from './log.js'
 import { detectProvider } from './detection.js'
 import { create as createLaunchDarkly } from './providers/launchdarkly.js'
+import { create as createOpenFeature } from './providers/openfeature.js'
 
 let currentFlags = {}
 let overrides = {}
 let detectedProvider = null
 let detectedTransport = null
 
-const providers = [createLaunchDarkly()]
+const providers = [createLaunchDarkly(), createOpenFeature()]
 
 function getProvider(id) {
   return providers.find(p => p.id === id) ?? null
@@ -157,6 +158,16 @@ window.EventSource = function (url, init) {
   const originalAEL = es.addEventListener.bind(es)
 
   const provider = detected ? getProvider(detected.id) : null
+
+  // Unrecognized URL on a page with the OpenFeature SDK — tag as OF SSE.
+  // We can't parse the event format, but we know the transport and the SDK
+  // evaluation hooks already handle flag capture and overrides.
+  if (!provider && typeof window.OpenFeature !== 'undefined') {
+    log('EventSource: unknown URL with OpenFeature SDK — transport tagged as openfeature/sse')
+    if (!detectedProvider) setDetected('openfeature', 'sse')
+    return es
+  }
+
   if (!provider) return es
 
   es.addEventListener = function (type, listener, options) {
@@ -209,5 +220,37 @@ window.EventSource.OPEN = OriginalEventSource.OPEN
 window.EventSource.CLOSED = OriginalEventSource.CLOSED
 
 window.postMessage({ source: 'fc-inject', type: 'REQUEST_OVERRIDES' }, '*')
+
+// ── OpenFeature SDK detection ─────────────────────────────────────────────
+// Intercepts window.OpenFeature assignment so we catch it the instant it's set,
+// regardless of when the app initializes the SDK relative to our script.
+
+function tryHookOpenFeature(sdk) {
+  const ofProvider = getProvider('openfeature')
+  if (!ofProvider) return
+  const success = ofProvider.hookSDK(sdk, () => overrides, (flags) => {
+    currentFlags = flags
+    // Only claim openfeature if a specific provider hasn't already been detected
+    // (e.g. LD native via the LD OpenFeature adapter).
+    if (!detectedProvider) setDetected('openfeature', 'sse')
+    notify()
+  })
+  if (success && !detectedProvider) setDetected('openfeature', 'sse')
+}
+
+;(function setupOpenFeatureDetection() {
+  if (typeof window.OpenFeature !== 'undefined') {
+    tryHookOpenFeature(window.OpenFeature)
+    return
+  }
+  // Trap the assignment — removed immediately after the first set.
+  Object.defineProperty(window, 'OpenFeature', {
+    configurable: true,
+    set(sdk) {
+      Object.defineProperty(window, 'OpenFeature', { value: sdk, writable: true, configurable: true })
+      tryHookOpenFeature(sdk)
+    },
+  })
+})()
 
 log('loaded')

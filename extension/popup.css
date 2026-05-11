@@ -82,6 +82,14 @@ header {
   color: #fff;
 }
 
+.badge--light {
+  background: #fff;
+  color: #1a1a1a;
+  border: 1.5px solid #d1d5db;
+}
+
+.badge--light .provider-detected { opacity: 0.6; }
+
 .provider-logo {
   width: 14px;
   height: 14px;

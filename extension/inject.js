@@ -114,12 +114,87 @@
     };
   }
 
+  // src/inject/providers/openfeature.js
+  function create2() {
+    let hooked = false;
+    return {
+      id: "openfeature",
+      isPayload: () => false,
+      applyPollingOverrides: () => null,
+      // Patches OpenFeature client evaluation methods to capture flags and inject overrides.
+      // Works for any underlying provider regardless of transport.
+      hookSDK(openFeature, getOverrides, onFlagsUpdate) {
+        if (hooked) return true;
+        const client = openFeature.getClient?.();
+        if (!client) {
+          log("OpenFeature: getClient() unavailable");
+          return false;
+        }
+        const capturedFlags = {};
+        const valueMethods = ["getBooleanValue", "getStringValue", "getNumberValue", "getObjectValue"];
+        const detailsMethods = ["getBooleanDetails", "getStringDetails", "getNumberDetails", "getObjectDetails"];
+        for (const method of valueMethods) {
+          const original = client[method]?.bind(client);
+          if (!original) continue;
+          client[method] = function(flagKey, defaultValue, ...args) {
+            const ovr = getOverrides();
+            if (flagKey in ovr) {
+              if (capturedFlags[flagKey]?.value !== ovr[flagKey]) {
+                capturedFlags[flagKey] = { value: ovr[flagKey] };
+                onFlagsUpdate({ ...capturedFlags });
+              }
+              return ovr[flagKey];
+            }
+            const value = original(flagKey, defaultValue, ...args);
+            if (capturedFlags[flagKey]?.value !== value || !(flagKey in capturedFlags)) {
+              capturedFlags[flagKey] = { value };
+              onFlagsUpdate({ ...capturedFlags });
+            }
+            return value;
+          };
+        }
+        for (const method of detailsMethods) {
+          const original = client[method]?.bind(client);
+          if (!original) continue;
+          client[method] = function(flagKey, defaultValue, ...args) {
+            const ovr = getOverrides();
+            if (flagKey in ovr) {
+              if (capturedFlags[flagKey]?.value !== ovr[flagKey]) {
+                capturedFlags[flagKey] = { value: ovr[flagKey] };
+                onFlagsUpdate({ ...capturedFlags });
+              }
+              return { value: ovr[flagKey], flagKey, reason: "OVERRIDE" };
+            }
+            const details = original(flagKey, defaultValue, ...args);
+            if (capturedFlags[flagKey]?.value !== details.value || !(flagKey in capturedFlags)) {
+              capturedFlags[flagKey] = { value: details.value };
+              onFlagsUpdate({ ...capturedFlags });
+            }
+            return details;
+          };
+        }
+        hooked = true;
+        log("OpenFeature: client hooked (%d methods patched)", valueMethods.length + detailsMethods.length);
+        return true;
+      },
+      registerPutListener() {
+      },
+      // No SSE replay for OF — evaluation hooks return overrides on the next call.
+      // Just fire notify() so the popup stays in sync with the current override state.
+      fireFakePut(currentFlags2, overrides2, notifyFn) {
+        notifyFn();
+      },
+      handleSSEPut: () => null,
+      handleSSEPatch: () => ({ patched: false })
+    };
+  }
+
   // src/inject/index.js
   var currentFlags = {};
   var overrides = {};
   var detectedProvider = null;
   var detectedTransport = null;
-  var providers = [create()];
+  var providers = [create(), create2()];
   function getProvider(id) {
     return providers.find((p) => p.id === id) ?? null;
   }
@@ -241,6 +316,11 @@
     const es = new OriginalEventSource(url, init);
     const originalAEL = es.addEventListener.bind(es);
     const provider = detected ? getProvider(detected.id) : null;
+    if (!provider && typeof window.OpenFeature !== "undefined") {
+      log("EventSource: unknown URL with OpenFeature SDK \u2014 transport tagged as openfeature/sse");
+      if (!detectedProvider) setDetected("openfeature", "sse");
+      return es;
+    }
     if (!provider) return es;
     es.addEventListener = function(type, listener, options) {
       if (type !== "put" && type !== "patch" && type !== "message") {
@@ -286,5 +366,28 @@
   window.EventSource.OPEN = OriginalEventSource.OPEN;
   window.EventSource.CLOSED = OriginalEventSource.CLOSED;
   window.postMessage({ source: "fc-inject", type: "REQUEST_OVERRIDES" }, "*");
+  function tryHookOpenFeature(sdk) {
+    const ofProvider = getProvider("openfeature");
+    if (!ofProvider) return;
+    const success = ofProvider.hookSDK(sdk, () => overrides, (flags) => {
+      currentFlags = flags;
+      if (!detectedProvider) setDetected("openfeature", "sse");
+      notify();
+    });
+    if (success && !detectedProvider) setDetected("openfeature", "sse");
+  }
+  (function setupOpenFeatureDetection() {
+    if (typeof window.OpenFeature !== "undefined") {
+      tryHookOpenFeature(window.OpenFeature);
+      return;
+    }
+    Object.defineProperty(window, "OpenFeature", {
+      configurable: true,
+      set(sdk) {
+        Object.defineProperty(window, "OpenFeature", { value: sdk, writable: true, configurable: true });
+        tryHookOpenFeature(sdk);
+      }
+    });
+  })();
   log("loaded");
 })();
