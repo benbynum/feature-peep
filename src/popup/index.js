@@ -21,11 +21,12 @@ const TRANSPORT_ICONS = {
 
 function providerBadgeHTML(provider, transport) {
   const p = PROVIDERS[provider]
-  const transportLabel = transport === 'sse' ? 'streaming' : transport === 'polling' ? 'polling' : 'detected'
-  const transportIcon = TRANSPORT_ICONS[transport] || ''
   const logoHTML = p.imageSrc
     ? `<img src="${p.imageSrc}" class="provider-logo" aria-hidden="true" />`
     : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg>`
+  if (p.logoOnly) return logoHTML
+  const transportLabel = transport === 'sse' ? 'streaming' : transport === 'polling' ? 'polling' : 'detected'
+  const transportIcon = TRANSPORT_ICONS[transport] || ''
   return `${logoHTML}<span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`
 }
 

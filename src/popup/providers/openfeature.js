@@ -3,4 +3,5 @@ export const meta = {
   name: 'OpenFeature',
   imageSrc: 'openfeature.png',
   lightBadge: true,
+  logoOnly: true,
 }
