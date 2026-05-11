@@ -82,31 +82,64 @@ export function create() {
       notifyFn()
     },
 
-    // OFREP SSE event types (OpenFeature Remote Evaluation Protocol).
-    // provider_ready = full flag state (like LD's put)
-    // configuration_change = partial update (like LD's patch)
-    sseEventTypes: new Set(['provider_ready', 'configuration_change']),
+    // Matnaw event names + standard OFREP spec names + LD-style fallbacks
+    sseEventTypes: new Set([
+      'flags-snapshot', 'flag-changed', 'flag-deleted', // Matnaw
+      'provider_ready', 'configuration_change',         // OFREP spec
+      'put', 'patch', 'message',                        // generic fallbacks
+    ]),
 
     processSSEEvent(type, raw, currentFlags, overrides) {
-      if (type === 'provider_ready') {
-        if (!raw.flags || typeof raw.flags !== 'object') return null
-        const normalized = {}
-        for (const [key, flag] of Object.entries(raw.flags)) {
-          normalized[key] = { value: flag.value, version: flag.flagVersion || 0 }
+      // flags-snapshot (Matnaw) / provider_ready / put:
+      // array [{key, value, reason, variant}] or object {flags:{key:{value,flagVersion}}}
+      if (type === 'flags-snapshot' || type === 'provider_ready' || type === 'put' || type === 'message') {
+        if (Array.isArray(raw)) {
+          const normalized = {}
+          for (const flag of raw) {
+            if (flag.key != null && flag.value !== undefined) {
+              normalized[flag.key] = { value: flag.value, version: 0 }
+            }
+          }
+          if (Object.keys(normalized).length === 0) return null
+          log('OFREP %s: %d flags', type, Object.keys(normalized).length)
+          return { flags: normalized, proxyData: null, flagsChanged: true }
         }
-        log('OFREP provider_ready: %d flags', Object.keys(normalized).length)
-        // Pass through original event — the provider reads it directly; overrides
-        // are handled by evaluation hooks, not by modifying the SSE stream.
-        return { flags: normalized, proxyData: null, flagsChanged: true }
+        if (raw.flags && typeof raw.flags === 'object') {
+          const normalized = {}
+          for (const [key, flag] of Object.entries(raw.flags)) {
+            normalized[key] = { value: flag.value, version: flag.flagVersion || 0 }
+          }
+          if (Object.keys(normalized).length === 0) return null
+          log('OFREP %s: %d flags', type, Object.keys(normalized).length)
+          return { flags: normalized, proxyData: null, flagsChanged: true }
+        }
+        return null
       }
-      if (type === 'configuration_change') {
-        if (!raw.flags || typeof raw.flags !== 'object') return null
-        for (const [key, flag] of Object.entries(raw.flags)) {
-          currentFlags[key] = { value: flag.value, version: flag.flagVersion || 0 }
+
+      // flag-changed (Matnaw) / configuration_change / patch: single or bulk update
+      if (type === 'flag-changed' || type === 'configuration_change' || type === 'patch') {
+        if (raw.key != null && raw.value !== undefined) {
+          log('OFREP %s: %s', type, raw.key)
+          currentFlags[raw.key] = { value: raw.value, version: 0 }
+          return { flagsChanged: true, proxyData: null }
         }
-        log('OFREP configuration_change: %d flags updated', Object.keys(raw.flags).length)
+        if (raw.flags && typeof raw.flags === 'object') {
+          for (const [key, flag] of Object.entries(raw.flags)) {
+            currentFlags[key] = { value: flag.value, version: flag.flagVersion || 0 }
+          }
+          log('OFREP %s: %d flags updated', type, Object.keys(raw.flags).length)
+          return { flagsChanged: true, proxyData: null }
+        }
+        return null
+      }
+
+      // flag-deleted (Matnaw): remove flag from current state
+      if (type === 'flag-deleted' && raw.key != null) {
+        log('OFREP flag-deleted: %s', raw.key)
+        delete currentFlags[raw.key]
         return { flagsChanged: true, proxyData: null }
       }
+
       return null
     },
   }
