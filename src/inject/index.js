@@ -1,0 +1,213 @@
+import { log } from './log.js'
+import { detectProvider } from './detection.js'
+import { create as createLaunchDarkly } from './providers/launchdarkly.js'
+
+let currentFlags = {}
+let overrides = {}
+let detectedProvider = null
+let detectedTransport = null
+
+const providers = [createLaunchDarkly()]
+
+function getProvider(id) {
+  return providers.find(p => p.id === id) ?? null
+}
+
+function notify() {
+  window.postMessage({
+    source: 'fc-inject',
+    type: 'FLAGS_UPDATE',
+    flags: currentFlags,
+    overrides,
+    provider: detectedProvider,
+    transport: detectedTransport,
+  }, '*')
+}
+
+function setDetected(id, transport) {
+  detectedProvider = id
+  detectedTransport = transport
+}
+
+// ── Override application ──────────────────────────────────────────────────
+
+function applyOverrideImmediate() {
+  log('applyOverrideImmediate: transport=%s, provider=%s', detectedTransport, detectedProvider)
+  if (detectedTransport === 'sse') {
+    getProvider(detectedProvider)?.fireFakePut(currentFlags, overrides, notify)
+  }
+  // Polling overrides are injected via the XHR/fetch interceptors on the next request.
+}
+
+// ── Message bridge ────────────────────────────────────────────────────────
+
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.source !== 'fc-content') return
+  switch (e.data.type) {
+    case 'INIT_OVERRIDES':
+      overrides = e.data.overrides || {}
+      log('INIT_OVERRIDES: %o', overrides)
+      break
+    case 'SET_OVERRIDE':
+      log('SET_OVERRIDE: %s =', e.data.key, e.data.value)
+      overrides[e.data.key] = e.data.value
+      applyOverrideImmediate()
+      break
+    case 'CLEAR_OVERRIDE':
+      log('CLEAR_OVERRIDE: %s', e.data.key)
+      delete overrides[e.data.key]
+      applyOverrideImmediate()
+      break
+    case 'CLEAR_ALL_OVERRIDES':
+      log('CLEAR_ALL_OVERRIDES')
+      overrides = {}
+      applyOverrideImmediate()
+      break
+  }
+})
+
+// ── Fetch interceptor (polling) ───────────────────────────────────────────
+
+const OriginalFetch = window.fetch
+
+window.fetch = async function (input, init) {
+  const url = input instanceof Request ? input.url : String(input)
+  const response = await OriginalFetch.call(this, input, init)
+  const detected = detectProvider(url)
+  if (!detected || detected.transport !== 'polling' || !response.ok) return response
+
+  log('fetch: polling URL matched (%s) %s %d', detected.id, url.split('?')[0], response.status)
+
+  try {
+    const data = await response.clone().json()
+    const provider = getProvider(detected.id)
+    const modified = provider?.applyPollingOverrides(data, overrides)
+    if (modified) {
+      log('fetch: flag payload ✓, %d flags', Object.keys(data).length)
+      setDetected(detected.id, 'polling')
+      currentFlags = data
+      notify()
+      return new Response(JSON.stringify(modified), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    log('fetch: not a flag payload — response shape unexpected')
+  } catch (err) {
+    log('fetch: parse error %o', err)
+  }
+
+  return response
+}
+
+// ── XHR interceptor (polling) ─────────────────────────────────────────────
+
+const OriginalXHR = window.XMLHttpRequest
+
+window.XMLHttpRequest = function () {
+  const xhr = new OriginalXHR()
+  let requestUrl = ''
+
+  const originalOpen = xhr.open.bind(xhr)
+  xhr.open = function (method, url, ...args) {
+    requestUrl = typeof url === 'string' ? url : String(url)
+    return originalOpen(method, url, ...args)
+  }
+
+  xhr.addEventListener.call(xhr, 'readystatechange', function () {
+    if (xhr.readyState !== 4 || xhr.status !== 200) return
+    const detected = detectProvider(requestUrl)
+    if (!detected || detected.transport !== 'polling') return
+    try {
+      const data = JSON.parse(xhr.responseText)
+      const provider = getProvider(detected.id)
+      const modified = provider?.applyPollingOverrides(data, overrides)
+      if (!modified) return
+      log('XHR: flag payload ✓, %d flags', Object.keys(data).length)
+      setDetected(detected.id, 'polling')
+      currentFlags = data
+      const modifiedJson = JSON.stringify(modified)
+      Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
+      Object.defineProperty(xhr, 'response', {
+        get: function () { return xhr.responseType === 'json' ? modified : modifiedJson },
+        configurable: true,
+      })
+      log('XHR: patched responseText')
+      notify()
+    } catch (err) {
+      log('XHR: error %o', err)
+    }
+  })
+
+  return xhr
+}
+
+window.XMLHttpRequest.prototype = OriginalXHR.prototype
+
+// ── EventSource interceptor (SSE) ─────────────────────────────────────────
+
+const OriginalEventSource = window.EventSource
+
+window.EventSource = function (url, init) {
+  const urlStr = typeof url === 'string' ? url : String(url)
+  const detected = detectProvider(urlStr)
+  log('EventSource created: %s → %s', urlStr.split('?')[0], detected ? detected.transport : 'not detected')
+  const es = new OriginalEventSource(url, init)
+  const originalAEL = es.addEventListener.bind(es)
+
+  const provider = detected ? getProvider(detected.id) : null
+  if (!provider) return es
+
+  es.addEventListener = function (type, listener, options) {
+    if (type !== 'put' && type !== 'patch' && type !== 'message') {
+      originalAEL(type, listener, options)
+      return
+    }
+
+    if (type === 'put') provider.registerPutListener(listener)
+
+    originalAEL(type, (e) => {
+      try {
+        const raw = JSON.parse(e.data)
+
+        if (type === 'put') {
+          const modified = provider.handleSSEPut(raw, overrides)
+          if (modified !== null) {
+            setDetected(detected.id, 'sse')
+            log('EventSource put: %d flags, provider=%s', Object.keys(raw).length, detected.id)
+            currentFlags = raw
+            notify()
+            const proxied = Object.create(e, { data: { value: JSON.stringify(modified) } })
+            listener(proxied)
+            return
+          }
+        }
+
+        if (type === 'patch') {
+          const result = provider.handleSSEPatch(raw, currentFlags, overrides)
+          if (result.patched) {
+            notify()
+            if (result.overrideData) {
+              const proxied = Object.create(e, { data: { value: JSON.stringify(result.overrideData) } })
+              listener(proxied)
+              return
+            }
+          }
+        }
+      } catch (_) {}
+      listener(e)
+    }, options)
+  }
+
+  return es
+}
+
+window.EventSource.prototype = OriginalEventSource.prototype
+window.EventSource.CONNECTING = OriginalEventSource.CONNECTING
+window.EventSource.OPEN = OriginalEventSource.OPEN
+window.EventSource.CLOSED = OriginalEventSource.CLOSED
+
+window.postMessage({ source: 'fc-inject', type: 'REQUEST_OVERRIDES' }, '*')
+
+log('loaded')

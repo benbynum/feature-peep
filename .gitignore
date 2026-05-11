@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Dependencies
+node_modules/
+
 # Source media — keep only HQ GIF
 *.mov
 *.mp4

@@ -1,0 +1,22 @@
+export function detectProvider(url) {
+  try {
+    const u = new URL(url, location.href)
+    const host = u.hostname
+    const path = u.pathname
+
+    if (/(?:^|\.)(?:clientstream|stream)\.launchdarkly\.com$/.test(host)) {
+      return { id: 'launchdarkly', transport: 'sse' }
+    }
+    if (/(?:^|\.)(?:app|sdk)\.launchdarkly\.com$/.test(host)) {
+      return { id: 'launchdarkly', transport: 'polling' }
+    }
+    if (/\/sdk\/evalx\/[a-f0-9-]{20,}\/contexts\//i.test(path) ||
+        /\/sdk\/eval\/[a-f0-9-]{20,}\/users\//i.test(path)) {
+      return { id: 'launchdarkly', transport: 'polling' }
+    }
+    if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
+      return { id: 'launchdarkly', transport: 'sse' }
+    }
+  } catch (_) {}
+  return null
+}

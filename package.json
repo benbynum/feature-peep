@@ -1,0 +1,11 @@
+{
+  "name": "feature-creep",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/inject/index.js --bundle --format=iife --outfile=extension/inject.js && esbuild src/popup/index.js --bundle --format=iife --outfile=extension/popup.js",
+    "watch": "esbuild src/inject/index.js --bundle --format=iife --outfile=extension/inject.js --watch & esbuild src/popup/index.js --bundle --format=iife --outfile=extension/popup.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
