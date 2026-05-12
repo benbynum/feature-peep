@@ -17,6 +17,10 @@ export function detectProvider(url) {
     if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
       return { id: 'launchdarkly', transport: 'sse' }
     }
+    // PostHog Cloud
+    if (/(?:^|\.)(?:posthog|i\.posthog)\.com$/.test(host) && /\/decide\//.test(path)) {
+      return { id: 'posthog', transport: 'polling' }
+    }
     // OFREP (OpenFeature Remote Evaluation Protocol)
     if (/\/ofrep\/v1\/sse/.test(path)) {
       return { id: 'openfeature', transport: 'sse' }

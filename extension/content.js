@@ -12,11 +12,12 @@ window.addEventListener('message', (e) => {
   if (!chrome.runtime?.id) return
 
   if (e.data.type === 'REQUEST_OVERRIDES') {
-    chrome.storage.local.get('fc:overrides', (result) => {
+    const key = `fc:overrides:${e.data.origin || location.origin}`
+    chrome.storage.local.get(key, (result) => {
       window.postMessage({
         source: 'fc-content',
         type: 'INIT_OVERRIDES',
-        overrides: result['fc:overrides'] || {},
+        overrides: result[key] || {},
       }, '*')
     })
     return

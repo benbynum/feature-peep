@@ -12,9 +12,18 @@
   var meta2 = {
     id: "openfeature",
     name: "OpenFeature",
-    imageSrc: "openfeature.png",
+    imageSrc: "logos/openfeature.png",
     lightBadge: true,
     logoOnly: true
+  };
+
+  // src/popup/providers/posthog.js
+  var meta3 = {
+    id: "posthog",
+    name: "PostHog",
+    imageSrc: "logos/posthog.svg",
+    lightBadge: false,
+    logoOnly: false
   };
 
   // src/popup/index.js
@@ -27,7 +36,8 @@
   var searchQueryKey = "fc:searchQuery";
   var PROVIDERS = {
     [meta.id]: meta,
-    [meta2.id]: meta2
+    [meta2.id]: meta2,
+    [meta3.id]: meta3
   };
   var TRANSPORT_ICONS = {
     polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,
@@ -96,6 +106,8 @@
     const providerMeta = PROVIDERS[provider];
     badgeEl.classList.toggle("badge--light", !!providerMeta?.lightBadge);
     badgeEl.innerHTML = providerBadgeHTML(provider, state.transport);
+    const transportLabel = state.transport === "sse" ? "streaming" : state.transport === "polling" ? "polling" : null;
+    badgeEl.title = transportLabel ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}` : `Auto-detected: ${providerMeta?.name || provider}`;
     badgeEl.classList.remove("hidden");
     if (overrideCount > 0) {
       countEl.textContent = `${overrideCount} override${overrideCount > 1 ? "s" : ""} active`;

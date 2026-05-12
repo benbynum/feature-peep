@@ -15,15 +15,16 @@ At my last company we had 100+ flags across 5 environments and 40 engineers. Cha
 
 ## Supported Providers
 
-| Provider | Notes |
-|---|---|
-| LaunchDarkly (native JS SDK) | Full support |
-| LaunchDarkly via OpenFeature adapter | Full support — same SSE stream |
+| Provider | Transport | Notes |
+|---|---|---|
+| LaunchDarkly (native JS SDK) | Streaming + Polling | Full support |
+| LaunchDarkly via OpenFeature adapter | Streaming + Polling | Full support — same stream |
+| OpenFeature / OFREP | Streaming + Polling | Matnaw and other OFREP-compliant providers |
+| PostHog | Polling | Boolean, string, and number flags; PostHog Cloud only |
 
 ## Future Providers
 
-- OpenFeature (non-LaunchDarkly providers)
-- Optimizely, PostHog, Unleash, Statsig, Split / Harness, DevCycle, GrowthBook
+- Statsig, Unleash, Optimizely, Split / Harness, DevCycle, GrowthBook
 
 Don't see your provider? Open an issue or submit a pull request.
 
@@ -36,7 +37,18 @@ Not yet on the Chrome Web Store. Load it manually:
 3. Enable **Developer mode**
 4. Click **Load unpacked** → select the `extension/` folder
 
+## Privacy
+
+FeatureCreep collects no user data. It does not make network requests of its own, transmit anything to external servers, or communicate with provider APIs. All flag data is read locally from your browser's existing SDK traffic. Overrides are stored in your browser's local extension storage and never leave your device.
+
+## Scope
+
+- Does not modify server-side feature flags
+- Does not access provider admin APIs
+- Overrides are local to your browser session
+- Intended for frontend debugging and QA workflows
+
 ## Limitations
 
-- Requires LaunchDarkly streaming mode (polling not supported)
 - Chrome only
+- PostHog self-hosted instances require manual URL configuration (coming soon)

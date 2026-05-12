@@ -20,6 +20,9 @@
       if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
         return { id: "launchdarkly", transport: "sse" };
       }
+      if (/(?:^|\.)(?:posthog|i\.posthog)\.com$/.test(host) && /\/decide\//.test(path)) {
+        return { id: "posthog", transport: "polling" };
+      }
       if (/\/ofrep\/v1\/sse/.test(path)) {
         return { id: "openfeature", transport: "sse" };
       }
@@ -134,8 +137,25 @@
     const snapshotListeners = [];
     return {
       id: "openfeature",
-      isPayload: () => false,
-      applyPollingOverrides: () => null,
+      isPayload(data) {
+        return Array.isArray(data?.flags) && (data.flags.length === 0 || data.flags[0]?.key !== void 0);
+      },
+      applyPollingOverrides(data, overrides2) {
+        if (!this.isPayload(data)) return null;
+        const flags = data.flags.map(
+          (flag) => flag.key in overrides2 ? { ...flag, value: overrides2[flag.key], variant: String(overrides2[flag.key]) } : flag
+        );
+        return { ...data, flags };
+      },
+      normalizeFlags(data) {
+        const normalized = {};
+        for (const flag of data.flags) {
+          if (flag.key != null && flag.value !== void 0) {
+            normalized[flag.key] = { value: flag.value };
+          }
+        }
+        return normalized;
+      },
       // Patches OpenFeature client evaluation methods to capture flags and inject overrides.
       // Works for any underlying provider regardless of transport.
       hookSDK(openFeature, getOverrides, onFlagsUpdate) {
@@ -283,12 +303,49 @@
     };
   }
 
+  // src/inject/providers/posthog.js
+  function create3() {
+    const SCALAR = /* @__PURE__ */ new Set(["boolean", "string", "number"]);
+    function isPayload(data) {
+      return data != null && typeof data === "object" && "featureFlags" in data && typeof data.featureFlags === "object";
+    }
+    return {
+      id: "posthog",
+      isPayload,
+      applyPollingOverrides(data, overrides2) {
+        if (!isPayload(data)) return null;
+        const featureFlags = { ...data.featureFlags };
+        for (const key of Object.keys(overrides2)) {
+          if (key in featureFlags && SCALAR.has(typeof featureFlags[key])) {
+            featureFlags[key] = overrides2[key];
+          }
+        }
+        log("PostHog polling: %d flags", Object.keys(featureFlags).length);
+        return { ...data, featureFlags };
+      },
+      normalizeFlags(data) {
+        const normalized = {};
+        for (const [key, value] of Object.entries(data.featureFlags)) {
+          if (SCALAR.has(typeof value)) normalized[key] = { value };
+        }
+        return normalized;
+      },
+      registerListener: () => {
+      },
+      fireFakePut(_flags, _overrides, notifyFn) {
+        notifyFn();
+      },
+      sseEventTypes: /* @__PURE__ */ new Set(),
+      processSSEEvent: () => null
+    };
+  }
+
   // src/inject/index.js
   var currentFlags = {};
   var overrides = {};
   var detectedProvider = null;
   var detectedTransport = null;
-  var providers = [create(), create2()];
+  var providers = [create(), create2(), create3()];
   function getProvider(id) {
     return providers.find((p) => p.id === id) ?? null;
   }
@@ -348,9 +405,9 @@
       const provider = getProvider(detected.id);
       const modified = provider?.applyPollingOverrides(data, overrides);
       if (modified) {
-        log("fetch: flag payload \u2713, %d flags", Object.keys(data).length);
+        currentFlags = provider.normalizeFlags?.(data) ?? data;
+        log("fetch: flag payload \u2713, %d flags", Object.keys(currentFlags).length);
         setDetected(detected.id, "polling");
-        currentFlags = data;
         notify();
         return new Response(JSON.stringify(modified), {
           status: response.status,
@@ -382,9 +439,9 @@
         const provider = getProvider(detected.id);
         const modified = provider?.applyPollingOverrides(data, overrides);
         if (!modified) return;
-        log("XHR: flag payload \u2713, %d flags", Object.keys(data).length);
+        currentFlags = provider.normalizeFlags?.(data) ?? data;
+        log("XHR: flag payload \u2713, %d flags", Object.keys(currentFlags).length);
         setDetected(detected.id, "polling");
-        currentFlags = data;
         const modifiedJson = JSON.stringify(modified);
         Object.defineProperty(xhr, "responseText", { get: () => modifiedJson, configurable: true });
         Object.defineProperty(xhr, "response", {
@@ -450,7 +507,7 @@
   window.EventSource.CONNECTING = OriginalEventSource.CONNECTING;
   window.EventSource.OPEN = OriginalEventSource.OPEN;
   window.EventSource.CLOSED = OriginalEventSource.CLOSED;
-  window.postMessage({ source: "fc-inject", type: "REQUEST_OVERRIDES" }, "*");
+  window.postMessage({ source: "fc-inject", type: "REQUEST_OVERRIDES", origin: location.origin }, "*");
   function tryHookOpenFeature(sdk) {
     const ofProvider = getProvider("openfeature");
     if (!ofProvider) return;

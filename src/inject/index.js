@@ -2,13 +2,14 @@ import { log } from './log.js'
 import { detectProvider } from './detection.js'
 import { create as createLaunchDarkly } from './providers/launchdarkly.js'
 import { create as createOpenFeature } from './providers/openfeature.js'
+import { create as createPostHog } from './providers/posthog.js'
 
 let currentFlags = {}
 let overrides = {}
 let detectedProvider = null
 let detectedTransport = null
 
-const providers = [createLaunchDarkly(), createOpenFeature()]
+const providers = [createLaunchDarkly(), createOpenFeature(), createPostHog()]
 
 function getProvider(id) {
   return providers.find(p => p.id === id) ?? null
@@ -84,9 +85,9 @@ window.fetch = async function (input, init) {
     const provider = getProvider(detected.id)
     const modified = provider?.applyPollingOverrides(data, overrides)
     if (modified) {
-      log('fetch: flag payload ✓, %d flags', Object.keys(data).length)
+      currentFlags = provider.normalizeFlags?.(data) ?? data
+      log('fetch: flag payload ✓, %d flags', Object.keys(currentFlags).length)
       setDetected(detected.id, 'polling')
-      currentFlags = data
       notify()
       return new Response(JSON.stringify(modified), {
         status: response.status,
@@ -125,9 +126,9 @@ window.XMLHttpRequest = function () {
       const provider = getProvider(detected.id)
       const modified = provider?.applyPollingOverrides(data, overrides)
       if (!modified) return
-      log('XHR: flag payload ✓, %d flags', Object.keys(data).length)
+      currentFlags = provider.normalizeFlags?.(data) ?? data
+      log('XHR: flag payload ✓, %d flags', Object.keys(currentFlags).length)
       setDetected(detected.id, 'polling')
-      currentFlags = data
       const modifiedJson = JSON.stringify(modified)
       Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
       Object.defineProperty(xhr, 'response', {
@@ -208,7 +209,7 @@ window.EventSource.CONNECTING = OriginalEventSource.CONNECTING
 window.EventSource.OPEN = OriginalEventSource.OPEN
 window.EventSource.CLOSED = OriginalEventSource.CLOSED
 
-window.postMessage({ source: 'fc-inject', type: 'REQUEST_OVERRIDES' }, '*')
+window.postMessage({ source: 'fc-inject', type: 'REQUEST_OVERRIDES', origin: location.origin }, '*')
 
 // ── OpenFeature SDK detection ─────────────────────────────────────────────
 // Intercepts window.OpenFeature assignment so we catch it the instant it's set,

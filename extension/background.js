@@ -47,27 +47,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Override commands from popup
   if (msg.type === 'SET_OVERRIDE') {
-    chrome.storage.local.get('fc:overrides', (result) => {
-      const stored = result['fc:overrides'] || {}
-      stored[msg.key] = msg.value
-      chrome.storage.local.set({ 'fc:overrides': stored })
+    withActiveTabOrigin((key) => {
+      chrome.storage.local.get(key, (result) => {
+        const stored = result[key] || {}
+        stored[msg.key] = msg.value
+        chrome.storage.local.set({ [key]: stored })
+      })
     })
     forwardToActiveTab(msg)
     return
   }
 
   if (msg.type === 'CLEAR_OVERRIDE') {
-    chrome.storage.local.get('fc:overrides', (result) => {
-      const stored = result['fc:overrides'] || {}
-      delete stored[msg.key]
-      chrome.storage.local.set({ 'fc:overrides': stored })
+    withActiveTabOrigin((key) => {
+      chrome.storage.local.get(key, (result) => {
+        const stored = result[key] || {}
+        delete stored[msg.key]
+        chrome.storage.local.set({ [key]: stored })
+      })
     })
     forwardToActiveTab(msg)
     return
   }
 
   if (msg.type === 'CLEAR_ALL_OVERRIDES') {
-    chrome.storage.local.set({ 'fc:overrides': {} })
+    withActiveTabOrigin((key) => {
+      chrome.storage.local.set({ [key]: {} })
+    })
     forwardToActiveTab(msg)
     return
   }
@@ -78,6 +84,17 @@ function forwardToActiveTab(msg) {
   if (activeTabId) {
     chrome.tabs.sendMessage(activeTabId, msg).catch(() => {})
   }
+}
+
+function withActiveTabOrigin(callback) {
+  if (!activeTabId) return
+  chrome.tabs.get(activeTabId, (tab) => {
+    if (chrome.runtime.lastError || !tab?.url) return
+    try {
+      const origin = new URL(tab.url).origin
+      callback(`fc:overrides:${origin}`)
+    } catch (_) {}
+  })
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {

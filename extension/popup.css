@@ -27,9 +27,9 @@ header {
   flex-shrink: 0;
 }
 
+.logo { font-size: 14px; }
 .header-left { display: flex; align-items: center; gap: 6px; }
 .header-right { display: flex; align-items: center; gap: 8px; }
-.logo { font-size: 14px; }
 .title { font-weight: 600; font-size: 13px; letter-spacing: 0.01em; }
 
 .search-toggle {
@@ -185,7 +185,8 @@ img.provider-logo {
 .poll-refresh-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   padding: 5px 12px;
   background: #f5f5f5;
   border-bottom: 1px solid #e8e8e8;
@@ -193,18 +194,21 @@ img.provider-logo {
 }
 
 .poll-refresh-btn {
-  background: none;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 2px;
   display: inline-flex;
   align-items: center;
-  border-radius: 3px;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  cursor: pointer;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
   flex-shrink: 0;
 }
 
-.poll-refresh-btn:hover { color: #374151; }
+.poll-refresh-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
 
 .poll-refresh-hint {
   font-size: 10px;

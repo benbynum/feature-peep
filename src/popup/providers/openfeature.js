@@ -1,7 +1,7 @@
 export const meta = {
   id: 'openfeature',
   name: 'OpenFeature',
-  imageSrc: 'openfeature.png',
+  imageSrc: 'logos/openfeature.png',
   lightBadge: true,
   logoOnly: true,
 }

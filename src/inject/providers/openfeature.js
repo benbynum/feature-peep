@@ -7,8 +7,30 @@ export function create() {
   return {
     id: 'openfeature',
 
-    isPayload: () => false,
-    applyPollingOverrides: () => null,
+    isPayload(data) {
+      return Array.isArray(data?.flags) &&
+        (data.flags.length === 0 || data.flags[0]?.key !== undefined)
+    },
+
+    applyPollingOverrides(data, overrides) {
+      if (!this.isPayload(data)) return null
+      const flags = data.flags.map(flag =>
+        flag.key in overrides
+          ? { ...flag, value: overrides[flag.key], variant: String(overrides[flag.key]) }
+          : flag
+      )
+      return { ...data, flags }
+    },
+
+    normalizeFlags(data) {
+      const normalized = {}
+      for (const flag of data.flags) {
+        if (flag.key != null && flag.value !== undefined) {
+          normalized[flag.key] = { value: flag.value }
+        }
+      }
+      return normalized
+    },
 
     // Patches OpenFeature client evaluation methods to capture flags and inject overrides.
     // Works for any underlying provider regardless of transport.

@@ -1,5 +1,6 @@
 import { meta as ldMeta } from './providers/launchdarkly.js'
 import { meta as ofMeta } from './providers/openfeature.js'
+import { meta as phMeta } from './providers/posthog.js'
 
 let state = { flags: {}, overrides: {}, provider: null, transport: null }
 let expandedKey = null
@@ -12,6 +13,7 @@ let searchQueryKey  = 'fc:searchQuery'
 const PROVIDERS = {
   [ldMeta.id]: ldMeta,
   [ofMeta.id]: ofMeta,
+  [phMeta.id]: phMeta,
 }
 
 const TRANSPORT_ICONS = {
@@ -100,6 +102,10 @@ function render() {
   const providerMeta = PROVIDERS[provider]
   badgeEl.classList.toggle('badge--light', !!providerMeta?.lightBadge)
   badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
+  const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
+  badgeEl.title = transportLabel
+    ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}`
+    : `Auto-detected: ${providerMeta?.name || provider}`
   badgeEl.classList.remove('hidden')
 
   if (overrideCount > 0) {

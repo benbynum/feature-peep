@@ -16,3 +16,5 @@ plans/PLAN-v*.md
 !plans/*-latest.md
 requirements/REQ-v*.md
 !requirements/*-latest.md
+
+screencasts
