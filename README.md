@@ -2,7 +2,7 @@
 
 Inspect and override feature flags in real-time. Any page, any environment.
 
-![FeatureCreep demo](feature-creep-demo-hq.gif)
+![FeatureCreep demo](extension/assets/feature-creep-demo-hq.gif)
 
 ## Why it exists
 
