@@ -1,16 +1,15 @@
 # FeatureCreep
 
-Inspect and override feature flags without touching your app or environment config.
+Inspect and override feature flags in real-time. Any page, any environment.
 
 ![FeatureCreep demo](feature-creep-demo-hq.gif)
 
 ## Why it exists
 
-At my last company we had 100+ flags across 5 environments and 40 engineers. Changing a flag to test something meant risking someone else's environment or breaking CI. FeatureCreep fixes that!
+At my last company we had 100+ flags across 5 environments and 40 engineers. Changing a flag to smoke test a UI feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeatureCreep changes that!
 
 - See which flags are active on any page, any env, instantly
 - Reproduce bugs that only appear in a specific flag state
-- Test both sides of a flag without touching the dashboard
 - No more waiting on someone with dashboard access to make a change
 
 ## Supported Providers
@@ -24,7 +23,12 @@ At my last company we had 100+ flags across 5 environments and 40 engineers. Cha
 
 ## Future Providers
 
-- Statsig, Unleash, Optimizely, Split / Harness, DevCycle, GrowthBook
+- Statsig
+- Unleash
+- Optimizely
+- Split / Harness
+- DevCycle
+- GrowthBook
 
 Don't see your provider? Open an issue or submit a pull request.
 
