@@ -6,10 +6,11 @@ Inspect and override feature flags in real-time. Any page, any environment.
 
 ## Why it exists
 
-At my last company we had 100+ flags across 5 environments and 40 engineers. Changing a flag to smoke test a UI feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeatureCreep changes that!
+At my last company we had 100+ flags across 5 environments. There were 40 engineers. Toggling a value to smoke test a feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeatureCreep changes that!
 
-- See which flags are active on any page, any env, instantly
-- Reproduce bugs that only appear in a specific flag state
+- Auto-detect which provider is implemented
+- See which flags are active on any page instantly
+- Reproduce bugs in all environemnts without worrying about negative downstream effects
 - No more waiting on someone with dashboard access to make a change
 
 ## Supported Providers
@@ -18,7 +19,7 @@ At my last company we had 100+ flags across 5 environments and 40 engineers. Cha
 |---|---|---|
 | LaunchDarkly (native JS SDK) | Streaming + Polling | Full support |
 | LaunchDarkly via OpenFeature adapter | Streaming + Polling | Full support — same stream |
-| OpenFeature / OFREP | Streaming + Polling | Matnaw and other OFREP-compliant providers |
+| OpenFeature / OFREP | Streaming + Polling | OFREP-compliant providers |
 | PostHog | Polling | Boolean, string, and number flags; PostHog Cloud only |
 
 ## Future Providers
