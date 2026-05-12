@@ -37,6 +37,10 @@ Not yet on the Chrome Web Store. Load it manually:
 3. Enable **Developer mode**
 4. Click **Load unpacked** → select the `extension/` folder
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for extension permissions rationale, known security characteristics, and how to report a vulnerability.
+
 ## Privacy
 
 FeatureCreep collects no user data. It does not make network requests of its own, transmit anything to external servers, or communicate with provider APIs. All flag data is read locally from your browser's existing SDK traffic. Overrides are stored in your browser's local extension storage and never leave your device.
