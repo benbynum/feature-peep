@@ -12,18 +12,32 @@ const PH_PAYLOAD = {
   },
 }
 
+const PH_V2_PAYLOAD = {
+  flags: {
+    'bool-flag':   { key: 'bool-flag',   enabled: true,  variant: null },
+    'string-flag': { key: 'string-flag', enabled: true,  variant: 'variant-a' },
+    'off-flag':    { key: 'off-flag',    enabled: false, variant: null },
+  },
+}
+
 describe('PostHog provider', () => {
   let provider: ReturnType<typeof create>
   beforeEach(() => { provider = create() })
 
   describe('isPayload', () => {
-    it('returns true for valid PostHog decide response', () => {
+    it('returns true for valid PostHog v1 decide response', () => {
       expect(provider.isPayload(PH_PAYLOAD)).toBe(true)
     })
-    it('returns true when featureFlags is empty', () => {
+    it('returns true when featureFlags is empty (v1)', () => {
       expect(provider.isPayload({ featureFlags: {} })).toBe(true)
     })
-    it('returns false for OFREP shape', () => {
+    it('returns true for valid PostHog v2 flags response', () => {
+      expect(provider.isPayload(PH_V2_PAYLOAD)).toBe(true)
+    })
+    it('returns true when v2 flags object is empty', () => {
+      expect(provider.isPayload({ flags: {} })).toBe(true)
+    })
+    it('returns false for OFREP shape (flags is array, not object)', () => {
       expect(provider.isPayload({ flags: [{ key: 'x', value: true }] })).toBe(false)
     })
     it('returns false for LD shape', () => {
@@ -73,6 +87,55 @@ describe('PostHog provider', () => {
       expect(PH_PAYLOAD.featureFlags['bool-flag']).toBe(true)
     })
   })
+
+  // ── v2 (/flags/?v=2) ────────────────────────────────────────────────────
+
+  describe('applyPollingOverrides (v2)', () => {
+    it('returns null for non-PostHog payload', () => {
+      expect(provider.applyPollingOverrides({ other: true }, {})).toBeNull()
+    })
+    it('overrides a boolean flag via enabled field', () => {
+      const result = provider.applyPollingOverrides(PH_V2_PAYLOAD, { 'bool-flag': false }) as typeof PH_V2_PAYLOAD
+      expect(result.flags['bool-flag'].enabled).toBe(false)
+      expect(result.flags['bool-flag'].variant).toBeUndefined()
+    })
+    it('overrides a string flag via variant field', () => {
+      const result = provider.applyPollingOverrides(PH_V2_PAYLOAD, { 'string-flag': 'variant-b' }) as typeof PH_V2_PAYLOAD
+      expect(result.flags['string-flag'].variant).toBe('variant-b')
+      expect(result.flags['string-flag'].enabled).toBe(true)
+    })
+    it('turns an off flag on via boolean override', () => {
+      const result = provider.applyPollingOverrides(PH_V2_PAYLOAD, { 'off-flag': true }) as typeof PH_V2_PAYLOAD
+      expect(result.flags['off-flag'].enabled).toBe(true)
+    })
+    it('ignores override for key not in flags', () => {
+      const result = provider.applyPollingOverrides(PH_V2_PAYLOAD, { 'nonexistent': true }) as typeof PH_V2_PAYLOAD
+      expect(result.flags).not.toHaveProperty('nonexistent')
+    })
+    it('does not mutate the original payload', () => {
+      provider.applyPollingOverrides(PH_V2_PAYLOAD, { 'bool-flag': false })
+      expect(PH_V2_PAYLOAD.flags['bool-flag'].enabled).toBe(true)
+    })
+  })
+
+  describe('normalizeFlags (v2)', () => {
+    it('uses variant as value when present', () => {
+      expect(provider.normalizeFlags(PH_V2_PAYLOAD)).toMatchObject({
+        'string-flag': { value: 'variant-a' },
+      })
+    })
+    it('uses enabled as value when variant is absent', () => {
+      expect(provider.normalizeFlags(PH_V2_PAYLOAD)).toMatchObject({
+        'bool-flag': { value: true },
+        'off-flag':  { value: false },
+      })
+    })
+    it('returns empty object when flags is empty', () => {
+      expect(provider.normalizeFlags({ flags: {} })).toEqual({})
+    })
+  })
+
+  // ── normalizeFlags v1 ────────────────────────────────────────────────────
 
   describe('normalizeFlags', () => {
     it('maps featureFlags to { key: { value } } shape', () => {

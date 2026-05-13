@@ -41,20 +41,31 @@ describe('detectProvider', () => {
   })
 
   describe('PostHog', () => {
-    it('detects app.posthog.com', () => {
+    it('detects app.posthog.com /decide/ (v1 SDK)', () => {
       expect(detectProvider('https://app.posthog.com/decide/?v=3'))
         .toEqual({ id: 'posthog', transport: 'polling' })
     })
-    it('detects eu.posthog.com', () => {
+    it('detects eu.posthog.com /decide/', () => {
       expect(detectProvider('https://eu.posthog.com/decide/?v=3'))
         .toEqual({ id: 'posthog', transport: 'polling' })
     })
-    it('detects i.posthog.com', () => {
+    it('detects i.posthog.com /decide/', () => {
       expect(detectProvider('https://i.posthog.com/decide/?v=3'))
+        .toEqual({ id: 'posthog', transport: 'polling' })
+    })
+    it('detects app.posthog.com /flags/ (v2 SDK)', () => {
+      expect(detectProvider('https://app.posthog.com/flags/?v=2'))
+        .toEqual({ id: 'posthog', transport: 'polling' })
+    })
+    it('detects i.posthog.com /flags/ (v2 SDK)', () => {
+      expect(detectProvider('https://i.posthog.com/flags/?v=2'))
         .toEqual({ id: 'posthog', transport: 'polling' })
     })
     it('does not match /decide/ on non-PostHog host', () => {
       expect(detectProvider('https://myapp.com/decide/?v=3')).toBeNull()
+    })
+    it('does not match /flags/ on non-PostHog host', () => {
+      expect(detectProvider('https://myapp.com/flags/?v=2')).toBeNull()
     })
   })
 

@@ -19,7 +19,7 @@ export function detectProvider(url: string): DetectedProvider | null {
     if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
       return { id: 'launchdarkly', transport: 'sse' }
     }
-    if (/(?:^|\.)(?:posthog|i\.posthog)\.com$/.test(host) && /\/decide\//.test(path)) {
+    if (/(?:^|\.)(?:posthog|i\.posthog)\.com$/.test(host) && (/\/decide\//.test(path) || path.startsWith('/flags/'))) {
       return { id: 'posthog', transport: 'polling' }
     }
     if (/\/ofrep\/v1\/sse/.test(path)) {

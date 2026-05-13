@@ -21,7 +21,7 @@
       if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
         return { id: "launchdarkly", transport: "sse" };
       }
-      if (/(?:^|\.)(?:posthog|i\.posthog)\.com$/.test(host) && /\/decide\//.test(path)) {
+      if (/(?:^|\.)(?:posthog|i\.posthog)\.com$/.test(host) && (/\/decide\//.test(path) || path.startsWith("/flags/"))) {
         return { id: "posthog", transport: "polling" };
       }
       if (/\/ofrep\/v1\/sse/.test(path)) {
@@ -312,29 +312,68 @@
   // src/inject/providers/posthog.ts
   function create3() {
     const SCALAR = /* @__PURE__ */ new Set(["boolean", "string", "number"]);
-    function isPayload(data) {
+    function isV1Payload(data) {
       return data != null && typeof data === "object" && "featureFlags" in data && typeof data["featureFlags"] === "object";
+    }
+    function isV2Payload(data) {
+      if (!data || typeof data !== "object") return false;
+      const d = data;
+      if (!("flags" in d) || typeof d["flags"] !== "object" || Array.isArray(d["flags"])) return false;
+      const vals = Object.values(d["flags"]);
+      return vals.length === 0 || typeof vals[0] === "object" && vals[0] !== null && "enabled" in vals[0];
+    }
+    function isPayload(data) {
+      return isV1Payload(data) || isV2Payload(data);
     }
     return {
       id: "posthog",
       isPayload,
       applyPollingOverrides(data, overrides2) {
-        if (!isPayload(data)) return null;
-        const d = data;
-        const featureFlags = { ...d["featureFlags"] };
-        for (const key of Object.keys(overrides2)) {
-          if (key in featureFlags && SCALAR.has(typeof featureFlags[key])) {
-            featureFlags[key] = overrides2[key];
+        if (isV1Payload(data)) {
+          const d = data;
+          const featureFlags = { ...d["featureFlags"] };
+          for (const key of Object.keys(overrides2)) {
+            if (key in featureFlags && SCALAR.has(typeof featureFlags[key])) {
+              featureFlags[key] = overrides2[key];
+            }
           }
+          log("PostHog v1 polling: %d flags", Object.keys(featureFlags).length);
+          return { ...d, featureFlags };
         }
-        log("PostHog polling: %d flags", Object.keys(featureFlags).length);
-        return { ...d, featureFlags };
+        if (isV2Payload(data)) {
+          const d = data;
+          const flags = { ...d["flags"] };
+          for (const key of Object.keys(overrides2)) {
+            if (!(key in flags)) continue;
+            const override = overrides2[key];
+            const flag = { ...flags[key] };
+            if (typeof override === "boolean") {
+              flag["enabled"] = override;
+              delete flag["variant"];
+            } else {
+              flag["enabled"] = true;
+              flag["variant"] = String(override);
+            }
+            flags[key] = flag;
+          }
+          log("PostHog v2 polling: %d flags", Object.keys(flags).length);
+          return { ...d, flags };
+        }
+        return null;
       },
       normalizeFlags(data) {
-        const featureFlags = data["featureFlags"];
+        if (isV1Payload(data)) {
+          const featureFlags = data["featureFlags"];
+          const normalized2 = {};
+          for (const [key, value] of Object.entries(featureFlags)) {
+            if (SCALAR.has(typeof value)) normalized2[key] = { value };
+          }
+          return normalized2;
+        }
+        const flags = data["flags"];
         const normalized = {};
-        for (const [key, value] of Object.entries(featureFlags)) {
-          if (SCALAR.has(typeof value)) normalized[key] = { value };
+        for (const [key, flag] of Object.entries(flags)) {
+          normalized[key] = { value: flag["variant"] != null ? flag["variant"] : flag["enabled"] };
         }
         return normalized;
       },
