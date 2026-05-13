@@ -1,32 +1,42 @@
+"use strict";
 (() => {
-  // src/popup/providers/launchdarkly.js
+  // src/popup/providers/launchdarkly.ts
   var meta = {
     id: "launchdarkly",
     name: "LaunchDarkly",
     svgPath: "M1571 3174 c-12 -15 -21 -35 -21 -44 0 -18 97 -156 523 -745 124 -170 223 -311 222 -313 -2 -2 -293 116 -648 262 -355 146 -657 266 -671 266 -56 0 -88 -78 -48 -118 9 -9 270 -167 580 -351 309 -184 561 -335 559 -337 -2 -2 -199 -15 -438 -29 -238 -14 -544 -32 -679 -40 -135 -8 -380 -21 -545 -30 -353 -19 -360 -20 -386 -46 -24 -24 -25 -73 0 -98 23 -23 40 -25 426 -46 154 -9 390 -22 525 -30 135 -8 328 -19 430 -25 382 -22 663 -40 666 -42 1 -2 -253 -155 -565 -341 -312 -185 -572 -342 -579 -349 -20 -20 -14 -72 11 -96 40 -38 -47 -69 817 288 283 117 523 216 533 221 9 6 17 8 17 5 0 -2 -165 -233 -367 -513 -202 -279 -371 -520 -377 -535 -15 -39 18 -82 66 -86 34 -3 52 14 801 769 548 553 768 780 772 801 16 70 30 55 -773 860 -701 704 -768 768 -798 768 -23 0 -38 -8 -53 -26z",
     svgTransform: "translate(0,320) scale(0.1,-0.1)",
-    viewBox: "0 0 320 320"
-  };
-
-  // src/popup/providers/openfeature.js
-  var meta2 = {
-    id: "openfeature",
-    name: "OpenFeature",
-    imageSrc: "logos/openfeature.png",
-    lightBadge: true,
-    logoOnly: true
-  };
-
-  // src/popup/providers/posthog.js
-  var meta3 = {
-    id: "posthog",
-    name: "PostHog",
-    imageSrc: "logos/posthog.svg",
+    viewBox: "0 0 320 320",
     lightBadge: false,
     logoOnly: false
   };
 
-  // src/popup/index.js
+  // src/popup/providers/openfeature.ts
+  var meta2 = {
+    id: "openfeature",
+    name: "OpenFeature",
+    imageSrc: "assets/openfeature.png",
+    lightBadge: true,
+    logoOnly: true
+  };
+
+  // src/popup/providers/posthog.ts
+  var meta3 = {
+    id: "posthog",
+    name: "PostHog",
+    imageSrc: "assets/posthog.svg",
+    lightBadge: false,
+    logoOnly: false
+  };
+
+  // src/constants.ts
+  var MSG_SET_OVERRIDE = "SET_OVERRIDE";
+  var MSG_CLEAR_OVERRIDE = "CLEAR_OVERRIDE";
+  var MSG_CLEAR_ALL_OVERRIDES = "CLEAR_ALL_OVERRIDES";
+  var MSG_FLAGS_UPDATE = "FLAGS_UPDATE";
+  var MSG_GET_FLAGS = "GET_FLAGS";
+
+  // src/popup/index.ts
   var state = { flags: {}, overrides: {}, provider: null, transport: null };
   var expandedKey = null;
   var pendingPollRefresh = false;
@@ -47,7 +57,7 @@
     const p = PROVIDERS[provider];
     const logoHTML = p.imageSrc ? `<img src="${p.imageSrc}" class="provider-logo" aria-hidden="true" />` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg>`;
     const transportLabel = transport === "sse" ? "streaming" : transport === "polling" ? "polling" : "detected";
-    const transportIcon = TRANSPORT_ICONS[transport] || "";
+    const transportIcon = transport ? TRANSPORT_ICONS[transport] ?? "" : "";
     if (p.logoOnly) return `${logoHTML}<span class="provider-detected">${transportLabel} ${transportIcon}</span>`;
     return `${logoHTML}<span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`;
   }
@@ -68,7 +78,7 @@
     return type;
   }
   function send(msg) {
-    return chrome.runtime.sendMessage(msg).catch(() => {
+    chrome.runtime.sendMessage(msg).catch(() => {
     });
   }
   function sendOverride(msg) {
@@ -85,7 +95,6 @@
     const badgeEl = document.getElementById("provider-badge");
     const toolbarEl = document.getElementById("toolbar");
     const countEl = document.getElementById("override-count");
-    const clearBtn = document.getElementById("clear-all-btn");
     const pollRefreshBar = document.getElementById("poll-refresh-bar");
     const listEl = document.getElementById("flag-list");
     if (keys.length === 0) {
@@ -129,7 +138,7 @@
       const isExpanded = expandedKey === key;
       const li = document.createElement("li");
       li.className = `flag-item${hasOverride ? " overridden" : ""}`;
-      li.dataset.key = key;
+      li.dataset["key"] = key;
       const row = document.createElement("div");
       row.className = "flag-row";
       row.title = hasOverride ? `Overriding: ${formatValue(flag.value, type)}` : "Click to override";
@@ -174,10 +183,10 @@
           trueBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             if (flag.value === true) {
-              sendOverride({ type: "CLEAR_OVERRIDE", key });
+              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
               delete state.overrides[key];
             } else {
-              sendOverride({ type: "SET_OVERRIDE", key, value: true });
+              sendOverride({ type: MSG_SET_OVERRIDE, key, value: true });
               state.overrides[key] = true;
             }
             render();
@@ -188,10 +197,10 @@
           falseBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             if (flag.value === false) {
-              sendOverride({ type: "CLEAR_OVERRIDE", key });
+              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
               delete state.overrides[key];
             } else {
-              sendOverride({ type: "SET_OVERRIDE", key, value: false });
+              sendOverride({ type: MSG_SET_OVERRIDE, key, value: false });
               state.overrides[key] = false;
             }
             render();
@@ -204,7 +213,7 @@
             restore.textContent = "restore";
             restore.addEventListener("click", (e) => {
               e.stopPropagation();
-              sendOverride({ type: "CLEAR_OVERRIDE", key });
+              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
               delete state.overrides[key];
               render();
             });
@@ -228,10 +237,10 @@
               return;
             }
             if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
-              sendOverride({ type: "CLEAR_OVERRIDE", key });
+              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
               delete state.overrides[key];
             } else {
-              sendOverride({ type: "SET_OVERRIDE", key, value: parsed });
+              sendOverride({ type: MSG_SET_OVERRIDE, key, value: parsed });
               state.overrides[key] = parsed;
             }
             render();
@@ -263,7 +272,7 @@
             restore.textContent = "restore";
             restore.addEventListener("click", (e) => {
               e.stopPropagation();
-              sendOverride({ type: "CLEAR_OVERRIDE", key });
+              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
               delete state.overrides[key];
               render();
             });
@@ -288,7 +297,7 @@
     btn.classList.add("spinning");
     btn.addEventListener("animationend", () => btn.classList.remove("spinning"), { once: true });
     getActiveTab((tab) => {
-      if (tab) chrome.tabs.reload(tab.id);
+      if (tab?.id != null) chrome.tabs.reload(tab.id);
     });
   }
   var searchToggle = document.getElementById("search-toggle");
@@ -308,7 +317,7 @@
       searchClear.classList.add("hidden");
       localStorage.removeItem(searchQueryKey);
     }
-    localStorage.setItem(searchStateKey, searchOpen);
+    localStorage.setItem(searchStateKey, String(searchOpen));
   }
   searchToggle.addEventListener("click", () => {
     searchOpen = !searchOpen;
@@ -333,7 +342,7 @@
   var retryBtn = document.getElementById("retry-btn");
   retryBtn.addEventListener("click", () => reloadActiveTab(retryBtn));
   document.getElementById("clear-all-btn").addEventListener("click", () => {
-    sendOverride({ type: "CLEAR_ALL_OVERRIDES" });
+    sendOverride({ type: MSG_CLEAR_ALL_OVERRIDES });
     state.overrides = {};
     expandedKey = null;
     render();
@@ -351,9 +360,14 @@
     }
     searchOpen = localStorage.getItem(searchStateKey) === "true";
     searchQuery = localStorage.getItem(searchQueryKey) || "";
-    chrome.runtime.sendMessage({ type: "GET_FLAGS", tabId: tab?.id || null, windowId: windowId || null }, (response) => {
+    chrome.runtime.sendMessage({ type: MSG_GET_FLAGS, tabId: tab?.id ?? null, windowId: windowId ?? null }, (response) => {
       if (response) {
-        state = { flags: {}, overrides: {}, provider: null, transport: null, ...response };
+        state = {
+          flags: response.flags ?? {},
+          overrides: response.overrides ?? {},
+          provider: response.provider ?? null,
+          transport: response.transport ?? null
+        };
         render();
         applySearchOpen();
         if (searchOpen) searchInput.focus();
@@ -361,11 +375,11 @@
     });
   });
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "FLAGS_UPDATE") {
-      state.flags = msg.flags;
-      state.overrides = msg.overrides;
-      state.provider = msg.provider || state.provider;
-      state.transport = msg.transport || state.transport;
+    if (msg.type === MSG_FLAGS_UPDATE) {
+      state.flags = msg.flags ?? {};
+      state.overrides = msg.overrides ?? {};
+      state.provider = msg.provider ?? state.provider;
+      state.transport = msg.transport ?? state.transport;
       render();
       applySearchOpen();
     }

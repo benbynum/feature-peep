@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { detectProvider } from './detection.js'
 
 beforeAll(() => {
-  globalThis.location = { href: 'https://example.com/' }
+  globalThis.location = { href: 'https://example.com/' } as Location
 })
 
 describe('detectProvider', () => {

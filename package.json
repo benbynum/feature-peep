@@ -3,13 +3,16 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "vitest run && esbuild src/inject/index.js --bundle --format=iife --outfile=extension/inject.js && esbuild src/popup/index.js --bundle --format=iife --outfile=extension/popup.js",
-    "watch": "esbuild src/inject/index.js --bundle --format=iife --outfile=extension/inject.js --watch & esbuild src/popup/index.js --bundle --format=iife --outfile=extension/popup.js --watch"
+    "build": "npm run typecheck && vitest run && esbuild src/inject/index.ts --bundle --format=iife --outfile=extension/inject.js && esbuild src/popup/index.ts --bundle --format=iife --outfile=extension/popup.js && esbuild src/background.ts --bundle --format=iife --outfile=extension/background.js && esbuild src/content.ts --bundle --format=iife --outfile=extension/content.js",
+    "watch": "esbuild src/inject/index.ts --bundle --format=iife --outfile=extension/inject.js --watch & esbuild src/popup/index.ts --bundle --format=iife --outfile=extension/popup.js --watch & esbuild src/background.ts --bundle --format=iife --outfile=extension/background.js --watch & esbuild src/content.ts --bundle --format=iife --outfile=extension/content.js --watch"
   },
   "devDependencies": {
+    "@types/chrome": "^0.1.42",
     "esbuild": "^0.25.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.6"
   }
 }

@@ -1,36 +1,36 @@
-// inject.js runs in the MAIN world (see manifest) — no script tag injection needed.
-// This file runs in the isolated content script world and bridges
-// window.postMessage (from inject.js) ↔ chrome.runtime (background/popup).
+"use strict";
+(() => {
+  // src/constants.ts
+  var SOURCE_INJECT = "fc-inject";
+  var SOURCE_CONTENT = "fc-content";
+  var MSG_REQUEST_OVERRIDES = "REQUEST_OVERRIDES";
+  var MSG_INIT_OVERRIDES = "INIT_OVERRIDES";
+  var MSG_SET_OVERRIDE = "SET_OVERRIDE";
+  var MSG_CLEAR_OVERRIDE = "CLEAR_OVERRIDE";
+  var MSG_CLEAR_ALL_OVERRIDES = "CLEAR_ALL_OVERRIDES";
+  var STORAGE_OVERRIDES_PREFIX = "fc:overrides:";
 
-// ── Page world → extension ────────────────────────────────────────────────
-
-window.addEventListener('message', (e) => {
-  if (!e.data || e.data.source !== 'fc-inject') return
-
-  // Extension context is invalidated when the extension reloads mid-page.
-  // Stop trying to communicate — user must refresh the tab.
-  if (!chrome.runtime?.id) return
-
-  if (e.data.type === 'REQUEST_OVERRIDES') {
-    const key = `fc:overrides:${e.data.origin || location.origin}`
-    chrome.storage.local.get(key, (result) => {
-      window.postMessage({
-        source: 'fc-content',
-        type: 'INIT_OVERRIDES',
-        overrides: result[key] || {},
-      }, '*')
-    })
-    return
-  }
-
-  // Forward FLAGS_UPDATE to background
-  chrome.runtime.sendMessage(e.data).catch(() => {})
-})
-
-// ── Extension → page world ────────────────────────────────────────────────
-
-chrome.runtime.onMessage.addListener((msg) => {
-  if (['SET_OVERRIDE', 'CLEAR_OVERRIDE', 'CLEAR_ALL_OVERRIDES'].includes(msg.type)) {
-    window.postMessage({ source: 'fc-content', ...msg }, '*')
-  }
-})
+  // src/content.ts
+  window.addEventListener("message", (e) => {
+    if (!e.data || e.data.source !== SOURCE_INJECT) return;
+    if (!chrome.runtime?.id) return;
+    if (e.data.type === MSG_REQUEST_OVERRIDES) {
+      const key = `${STORAGE_OVERRIDES_PREFIX}${e.data.origin || location.origin}`;
+      chrome.storage.local.get(key, (result) => {
+        window.postMessage({
+          source: SOURCE_CONTENT,
+          type: MSG_INIT_OVERRIDES,
+          overrides: result[key] || {}
+        }, "*");
+      });
+      return;
+    }
+    chrome.runtime.sendMessage(e.data).catch(() => {
+    });
+  });
+  chrome.runtime.onMessage.addListener((msg) => {
+    if ([MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES].includes(msg.type)) {
+      window.postMessage({ source: SOURCE_CONTENT, ...msg }, "*");
+    }
+  });
+})();

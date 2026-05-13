@@ -1,71 +1,82 @@
 import { meta as ldMeta } from './providers/launchdarkly.js'
 import { meta as ofMeta } from './providers/openfeature.js'
 import { meta as phMeta } from './providers/posthog.js'
+import {
+  MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
+  MSG_FLAGS_UPDATE, MSG_GET_FLAGS,
+} from '../constants.js'
+import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
 
-let state = { flags: {}, overrides: {}, provider: null, transport: null }
-let expandedKey = null
+interface AppState {
+  flags: FlagsMap
+  overrides: Overrides
+  provider: string | null
+  transport: string | null
+}
+
+let state: AppState = { flags: {}, overrides: {}, provider: null, transport: null }
+let expandedKey: string | null = null
 let pendingPollRefresh = false
 let searchQuery = ''
 let searchOpen = false
 let searchStateKey  = 'fc:searchOpen'
 let searchQueryKey  = 'fc:searchQuery'
 
-const PROVIDERS = {
+const PROVIDERS: Record<string, ProviderMeta> = {
   [ldMeta.id]: ldMeta,
   [ofMeta.id]: ofMeta,
   [phMeta.id]: phMeta,
 }
 
-const TRANSPORT_ICONS = {
+const TRANSPORT_ICONS: Record<string, string> = {
   polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,
   sse:     `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>`,
 }
 
-function providerBadgeHTML(provider, transport) {
+function providerBadgeHTML(provider: string, transport: string | null): string {
   const p = PROVIDERS[provider]
   const logoHTML = p.imageSrc
     ? `<img src="${p.imageSrc}" class="provider-logo" aria-hidden="true" />`
     : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${p.viewBox}" class="provider-logo" aria-hidden="true"><g transform="${p.svgTransform}" fill="currentColor" stroke="none"><path d="${p.svgPath}"/></g></svg>`
   const transportLabel = transport === 'sse' ? 'streaming' : transport === 'polling' ? 'polling' : 'detected'
-  const transportIcon = TRANSPORT_ICONS[transport] || ''
+  const transportIcon = transport ? (TRANSPORT_ICONS[transport] ?? '') : ''
   if (p.logoOnly) return `${logoHTML}<span class="provider-detected">${transportLabel} ${transportIcon}</span>`
   return `${logoHTML}<span class="provider-name">${p.name}</span><span class="provider-detected">${transportLabel} ${transportIcon}</span>`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function inferType(value) {
+function inferType(value: unknown): 'boolean' | 'number' | 'string' | 'json' {
   if (typeof value === 'boolean') return 'boolean'
   if (typeof value === 'number')  return 'number'
   if (typeof value === 'string')  return 'string'
   return 'json'
 }
 
-function formatValue(value, type) {
+function formatValue(value: unknown, type: string): string {
   if (type === 'boolean') return String(value)
-  if (type === 'string')  return `"${value}"`
+  if (type === 'string')  return `"${value as string}"`
   if (type === 'json')    return JSON.stringify(value)
   return String(value)
 }
 
-function valueClass(value, type) {
+function valueClass(value: unknown, type: string): string {
   if (type === 'boolean') return value ? 'bool-true' : 'bool-false'
   return type
 }
 
-function send(msg) {
-  return chrome.runtime.sendMessage(msg).catch(() => {})
+function send(msg: object): void {
+  chrome.runtime.sendMessage(msg).catch(() => {})
 }
 
-// Sends an override mutation and marks a refresh needed for polling transport.
-function sendOverride(msg) {
+function sendOverride(msg: object): void {
   send(msg)
   if (state.transport === 'polling') pendingPollRefresh = true
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
 
-function render() {
+function render(): void {
   const { flags, overrides } = state
   const keys = Object.keys(flags)
   const overrideCount = Object.keys(overrides).length
@@ -73,14 +84,13 @@ function render() {
     ? keys.filter(k => k.toLowerCase().includes(searchQuery.toLowerCase()))
     : keys
 
-  const emptyEl        = document.getElementById('state-empty')
-  const flagsEl        = document.getElementById('state-flags')
-  const badgeEl        = document.getElementById('provider-badge')
-  const toolbarEl      = document.getElementById('toolbar')
-  const countEl        = document.getElementById('override-count')
-  const clearBtn       = document.getElementById('clear-all-btn')
-  const pollRefreshBar = document.getElementById('poll-refresh-bar')
-  const listEl         = document.getElementById('flag-list')
+  const emptyEl        = document.getElementById('state-empty')!
+  const flagsEl        = document.getElementById('state-flags')!
+  const badgeEl        = document.getElementById('provider-badge')!
+  const toolbarEl      = document.getElementById('toolbar')!
+  const countEl        = document.getElementById('override-count')!
+  const pollRefreshBar = document.getElementById('poll-refresh-bar')!
+  const listEl         = document.getElementById('flag-list')!
 
   if (keys.length === 0) {
     document.body.style.height = ''
@@ -132,9 +142,8 @@ function render() {
 
     const li = document.createElement('li')
     li.className = `flag-item${hasOverride ? ' overridden' : ''}`
-    li.dataset.key = key
+    li.dataset['key'] = key
 
-    // ── Flag row ────────────────────────────────────────────────────────
     const row = document.createElement('div')
     row.className = 'flag-row'
     row.title = hasOverride
@@ -171,7 +180,6 @@ function render() {
 
     li.appendChild(row)
 
-    // ── Editor ──────────────────────────────────────────────────────────
     if (isExpanded) {
       const editor = document.createElement('div')
       editor.className = 'flag-editor'
@@ -194,10 +202,10 @@ function render() {
         trueBtn.addEventListener('click', (e) => {
           e.stopPropagation()
           if (flag.value === true) {
-            sendOverride({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
             delete state.overrides[key]
           } else {
-            sendOverride({ type: 'SET_OVERRIDE', key, value: true })
+            sendOverride({ type: MSG_SET_OVERRIDE, key, value: true })
             state.overrides[key] = true
           }
           render()
@@ -209,10 +217,10 @@ function render() {
         falseBtn.addEventListener('click', (e) => {
           e.stopPropagation()
           if (flag.value === false) {
-            sendOverride({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
             delete state.overrides[key]
           } else {
-            sendOverride({ type: 'SET_OVERRIDE', key, value: false })
+            sendOverride({ type: MSG_SET_OVERRIDE, key, value: false })
             state.overrides[key] = false
           }
           render()
@@ -227,7 +235,7 @@ function render() {
           restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
-            sendOverride({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
             delete state.overrides[key]
             render()
           })
@@ -237,7 +245,6 @@ function render() {
         editor.appendChild(toggleRow)
 
       } else {
-        // String / number / JSON editor
         const editorRow = document.createElement('div')
         editorRow.className = 'editor-row'
 
@@ -250,7 +257,7 @@ function render() {
         input.placeholder = type === 'string' ? 'string value' : 'JSON value'
 
         const apply = () => {
-          let parsed
+          let parsed: unknown
           try {
             parsed = type === 'string' ? input.value : JSON.parse(input.value)
           } catch (_) {
@@ -258,10 +265,10 @@ function render() {
             return
           }
           if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
-            sendOverride({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
             delete state.overrides[key]
           } else {
-            sendOverride({ type: 'SET_OVERRIDE', key, value: parsed })
+            sendOverride({ type: MSG_SET_OVERRIDE, key, value: parsed })
             state.overrides[key] = parsed
           }
           render()
@@ -288,14 +295,13 @@ function render() {
           restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
-            sendOverride({ type: 'CLEAR_OVERRIDE', key })
+            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
             delete state.overrides[key]
             render()
           })
           editor.appendChild(restore)
         }
 
-        // Focus input after render
         requestAnimationFrame(() => input.focus())
       }
 
@@ -308,9 +314,7 @@ function render() {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
-// Resolves the active tab in the last-focused normal browser window.
-// Calling this fresh each time avoids stale background-side tracking state.
-function getActiveTab(callback) {
+function getActiveTab(callback: (tab: chrome.tabs.Tab | null, windowId?: number) => void): void {
   chrome.windows.getLastFocused({ windowTypes: ['normal'] }, (win) => {
     if (chrome.runtime.lastError || !win) return callback(null)
     chrome.tabs.query({ active: true, windowId: win.id }, (tabs) => {
@@ -319,20 +323,20 @@ function getActiveTab(callback) {
   })
 }
 
-function reloadActiveTab(btn) {
+function reloadActiveTab(btn: HTMLElement): void {
   btn.classList.add('spinning')
   btn.addEventListener('animationend', () => btn.classList.remove('spinning'), { once: true })
   getActiveTab((tab) => {
-    if (tab) chrome.tabs.reload(tab.id)
+    if (tab?.id != null) chrome.tabs.reload(tab.id)
   })
 }
 
-const searchToggle = document.getElementById('search-toggle')
-const searchBar    = document.getElementById('search-bar')
-const searchInput  = document.getElementById('search-input')
-const searchClear  = document.getElementById('search-clear')
+const searchToggle = document.getElementById('search-toggle')!
+const searchBar    = document.getElementById('search-bar')!
+const searchInput  = document.getElementById('search-input') as HTMLInputElement
+const searchClear  = document.getElementById('search-clear')!
 
-function applySearchOpen() {
+function applySearchOpen(): void {
   searchToggle.classList.toggle('active', searchOpen)
   if (searchOpen) {
     searchBar.classList.remove('hidden')
@@ -345,7 +349,7 @@ function applySearchOpen() {
     searchClear.classList.add('hidden')
     localStorage.removeItem(searchQueryKey)
   }
-  localStorage.setItem(searchStateKey, searchOpen)
+  localStorage.setItem(searchStateKey, String(searchOpen))
 }
 
 searchToggle.addEventListener('click', () => {
@@ -371,21 +375,19 @@ searchClear.addEventListener('click', () => {
   render()
 })
 
-const retryBtn = document.getElementById('retry-btn')
+const retryBtn = document.getElementById('retry-btn')!
 retryBtn.addEventListener('click', () => reloadActiveTab(retryBtn))
 
-document.getElementById('clear-all-btn').addEventListener('click', () => {
-  sendOverride({ type: 'CLEAR_ALL_OVERRIDES' })
+document.getElementById('clear-all-btn')!.addEventListener('click', () => {
+  sendOverride({ type: MSG_CLEAR_ALL_OVERRIDES })
   state.overrides = {}
   expandedKey = null
   render()
 })
 
-const pollRefreshBtn = document.getElementById('poll-refresh-btn')
+const pollRefreshBtn = document.getElementById('poll-refresh-btn')!
 pollRefreshBtn.addEventListener('click', () => reloadActiveTab(pollRefreshBtn))
 
-// Request current state — resolve the tab ourselves so background doesn't need
-// to track it, avoiding stale state from service worker restarts or async lag.
 getActiveTab((tab, windowId) => {
   if (tab?.url) {
     try {
@@ -397,9 +399,14 @@ getActiveTab((tab, windowId) => {
   searchOpen  = localStorage.getItem(searchStateKey) === 'true'
   searchQuery = localStorage.getItem(searchQueryKey) || ''
 
-  chrome.runtime.sendMessage({ type: 'GET_FLAGS', tabId: tab?.id || null, windowId: windowId || null }, (response) => {
+  chrome.runtime.sendMessage({ type: MSG_GET_FLAGS, tabId: tab?.id ?? null, windowId: windowId ?? null }, (response: AppState | undefined) => {
     if (response) {
-      state = { flags: {}, overrides: {}, provider: null, transport: null, ...response }
+      state = {
+        flags:     response.flags     ?? {},
+        overrides: response.overrides ?? {},
+        provider:  response.provider  ?? null,
+        transport: response.transport ?? null,
+      }
       render()
       applySearchOpen()
       if (searchOpen) searchInput.focus()
@@ -407,13 +414,12 @@ getActiveTab((tab, windowId) => {
   })
 })
 
-// Listen for live updates while popup is open
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'FLAGS_UPDATE') {
-    state.flags = msg.flags
-    state.overrides = msg.overrides
-    state.provider = msg.provider || state.provider
-    state.transport = msg.transport || state.transport
+chrome.runtime.onMessage.addListener((msg: { type: string; flags?: FlagsMap; overrides?: Overrides; provider?: string; transport?: string }) => {
+  if (msg.type === MSG_FLAGS_UPDATE) {
+    state.flags = msg.flags ?? {}
+    state.overrides = msg.overrides ?? {}
+    state.provider = msg.provider ?? state.provider
+    state.transport = msg.transport ?? state.transport
     render()
     applySearchOpen()
   }

@@ -3,22 +3,33 @@ import { detectProvider } from './detection.js'
 import { create as createLaunchDarkly } from './providers/launchdarkly.js'
 import { create as createOpenFeature } from './providers/openfeature.js'
 import { create as createPostHog } from './providers/posthog.js'
+import {
+  SOURCE_INJECT, SOURCE_CONTENT,
+  MSG_FLAGS_UPDATE, MSG_REQUEST_OVERRIDES,
+  MSG_INIT_OVERRIDES, MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
+} from '../constants.js'
+import type { FlagsMap, Overrides, Provider, ProviderId, Transport } from '../types.js'
 
-let currentFlags = {}
-let overrides = {}
-let detectedProvider = null
-let detectedTransport = null
+declare global {
+  interface Window { OpenFeature?: unknown }
+}
 
-const providers = [createLaunchDarkly(), createOpenFeature(), createPostHog()]
+let currentFlags: FlagsMap = {}
+let overrides: Overrides = {}
+let detectedProvider: ProviderId | null = null
+let detectedTransport: Transport | null = null
 
-function getProvider(id) {
+const providers: Provider[] = [createLaunchDarkly(), createOpenFeature(), createPostHog()]
+
+function getProvider(id: ProviderId | null): Provider | null {
+  if (!id) return null
   return providers.find(p => p.id === id) ?? null
 }
 
-function notify() {
+function notify(): void {
   window.postMessage({
-    source: 'fc-inject',
-    type: 'FLAGS_UPDATE',
+    source: SOURCE_INJECT,
+    type: MSG_FLAGS_UPDATE,
     flags: currentFlags,
     overrides,
     provider: detectedProvider,
@@ -26,41 +37,40 @@ function notify() {
   }, '*')
 }
 
-function setDetected(id, transport) {
+function setDetected(id: ProviderId, transport: Transport): void {
   detectedProvider = id
   detectedTransport = transport
 }
 
 // ── Override application ──────────────────────────────────────────────────
 
-function applyOverrideImmediate() {
+function applyOverrideImmediate(): void {
   log('applyOverrideImmediate: transport=%s, provider=%s', detectedTransport, detectedProvider)
   if (detectedTransport === 'sse') {
     getProvider(detectedProvider)?.fireFakePut(currentFlags, overrides, notify)
   }
-  // Polling overrides are injected via the XHR/fetch interceptors on the next request.
 }
 
 // ── Message bridge ────────────────────────────────────────────────────────
 
-window.addEventListener('message', (e) => {
-  if (!e.data || e.data.source !== 'fc-content') return
+window.addEventListener('message', (e: MessageEvent) => {
+  if (!e.data || e.data.source !== SOURCE_CONTENT) return
   switch (e.data.type) {
-    case 'INIT_OVERRIDES':
+    case MSG_INIT_OVERRIDES:
       overrides = e.data.overrides || {}
       log('INIT_OVERRIDES: %o', overrides)
       break
-    case 'SET_OVERRIDE':
+    case MSG_SET_OVERRIDE:
       log('SET_OVERRIDE: %s =', e.data.key, e.data.value)
       overrides[e.data.key] = e.data.value
       applyOverrideImmediate()
       break
-    case 'CLEAR_OVERRIDE':
+    case MSG_CLEAR_OVERRIDE:
       log('CLEAR_OVERRIDE: %s', e.data.key)
       delete overrides[e.data.key]
       applyOverrideImmediate()
       break
-    case 'CLEAR_ALL_OVERRIDES':
+    case MSG_CLEAR_ALL_OVERRIDES:
       log('CLEAR_ALL_OVERRIDES')
       overrides = {}
       applyOverrideImmediate()
@@ -72,28 +82,30 @@ window.addEventListener('message', (e) => {
 
 const OriginalFetch = window.fetch
 
-window.fetch = async function (input, init) {
+window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = input instanceof Request ? input.url : String(input)
-  const response = await OriginalFetch.call(this, input, init)
+  const response = await OriginalFetch(input, init)
   const detected = detectProvider(url)
   if (!detected || detected.transport !== 'polling' || !response.ok) return response
 
   log('fetch: polling URL matched (%s) %s %d', detected.id, url.split('?')[0], response.status)
 
   try {
-    const data = await response.clone().json()
+    const data: unknown = await response.clone().json()
     const provider = getProvider(detected.id)
-    const modified = provider?.applyPollingOverrides(data, overrides)
-    if (modified) {
-      currentFlags = provider.normalizeFlags?.(data) ?? data
-      log('fetch: flag payload ✓, %d flags', Object.keys(currentFlags).length)
-      setDetected(detected.id, 'polling')
-      notify()
-      return new Response(JSON.stringify(modified), {
-        status: response.status,
-        statusText: response.statusText,
-        headers: { 'Content-Type': 'application/json' },
-      })
+    if (provider) {
+      const modified = provider.applyPollingOverrides(data, overrides)
+      if (modified) {
+        currentFlags = provider.normalizeFlags(data)
+        log('fetch: flag payload ✓, %d flags', Object.keys(currentFlags).length)
+        setDetected(detected.id, 'polling')
+        notify()
+        return new Response(JSON.stringify(modified), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
     }
     log('fetch: not a flag payload — response shape unexpected')
   } catch (err) {
@@ -107,32 +119,34 @@ window.fetch = async function (input, init) {
 
 const OriginalXHR = window.XMLHttpRequest
 
-window.XMLHttpRequest = function () {
+function CustomXHR(): XMLHttpRequest {
   const xhr = new OriginalXHR()
   let requestUrl = ''
 
-  const originalOpen = xhr.open.bind(xhr)
-  xhr.open = function (method, url, ...args) {
+  const originalOpen = xhr.open.bind(xhr) as (...args: unknown[]) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(xhr as any).open = function(method: unknown, url: unknown, ...args: unknown[]): void {
     requestUrl = typeof url === 'string' ? url : String(url)
-    return originalOpen(method, url, ...args)
+    originalOpen(method, url, ...args)
   }
 
-  xhr.addEventListener.call(xhr, 'readystatechange', function () {
+  xhr.addEventListener('readystatechange', function() {
     if (xhr.readyState !== 4 || xhr.status !== 200) return
     const detected = detectProvider(requestUrl)
     if (!detected || detected.transport !== 'polling') return
     try {
-      const data = JSON.parse(xhr.responseText)
+      const data: unknown = JSON.parse(xhr.responseText)
       const provider = getProvider(detected.id)
-      const modified = provider?.applyPollingOverrides(data, overrides)
+      if (!provider) return
+      const modified = provider.applyPollingOverrides(data, overrides)
       if (!modified) return
-      currentFlags = provider.normalizeFlags?.(data) ?? data
+      currentFlags = provider.normalizeFlags(data)
       log('XHR: flag payload ✓, %d flags', Object.keys(currentFlags).length)
       setDetected(detected.id, 'polling')
       const modifiedJson = JSON.stringify(modified)
       Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
       Object.defineProperty(xhr, 'response', {
-        get: function () { return xhr.responseType === 'json' ? modified : modifiedJson },
+        get: function() { return xhr.responseType === 'json' ? modified : modifiedJson },
         configurable: true,
       })
       log('XHR: patched responseText')
@@ -145,13 +159,14 @@ window.XMLHttpRequest = function () {
   return xhr
 }
 
+window.XMLHttpRequest = CustomXHR as unknown as typeof XMLHttpRequest
 window.XMLHttpRequest.prototype = OriginalXHR.prototype
 
 // ── EventSource interceptor (SSE) ─────────────────────────────────────────
 
 const OriginalEventSource = window.EventSource
 
-window.EventSource = function (url, init) {
+function CustomEventSource(url: string | URL, init?: EventSourceInit): EventSource {
   const urlStr = typeof url === 'string' ? url : String(url)
   const detected = detectProvider(urlStr)
   log('EventSource created: %s → %s', urlStr.split('?')[0], detected ? detected.transport : 'not detected')
@@ -160,9 +175,6 @@ window.EventSource = function (url, init) {
 
   const provider = detected ? getProvider(detected.id) : null
 
-  // Unrecognized URL on a page with the OpenFeature SDK — tag as OF SSE.
-  // We can't parse the event format, but we know the transport and the SDK
-  // evaluation hooks already handle flag capture and overrides.
   if (!provider && typeof window.OpenFeature !== 'undefined') {
     log('EventSource: unknown URL with OpenFeature SDK — transport tagged as openfeature/sse')
     if (!detectedProvider) setDetected('openfeature', 'sse')
@@ -171,57 +183,58 @@ window.EventSource = function (url, init) {
 
   if (!provider) return es
 
-  es.addEventListener = function (type, listener, options) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(es as any).addEventListener = function(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
     if (!provider.sseEventTypes.has(type)) {
       originalAEL(type, listener, options)
       return
     }
 
-    provider.registerListener?.(type, listener)
+    const fn = typeof listener === 'function' ? listener : listener.handleEvent.bind(listener)
+    provider.registerListener(type, fn as (e: MessageEvent) => void)
 
-    originalAEL(type, (e) => {
+    originalAEL(type, (e: Event) => {
       try {
-        const raw = JSON.parse(e.data)
+        const raw: unknown = JSON.parse((e as MessageEvent).data)
         const result = provider.processSSEEvent(type, raw, currentFlags, overrides)
         if (result) {
           if (result.flags) currentFlags = result.flags
           if (result.flagsChanged) {
-            setDetected(detected.id, 'sse')
-            log('EventSource %s: %d flags, provider=%s', type, Object.keys(currentFlags).length, detected.id)
+            setDetected(detected!.id, 'sse')
+            log('EventSource %s: %d flags, provider=%s', type, Object.keys(currentFlags).length, detected!.id)
             notify()
           }
           if (result.proxyData != null) {
-            const proxied = Object.create(e, { data: { value: result.proxyData } })
-            listener(proxied)
+            const proxied = Object.create(e, { data: { value: result.proxyData } }) as Event
+            fn(proxied as MessageEvent)
             return
           }
         }
       } catch (_) {}
-      listener(e)
+      fn(e as MessageEvent)
     }, options)
   }
 
   return es
 }
 
-window.EventSource.prototype = OriginalEventSource.prototype
-window.EventSource.CONNECTING = OriginalEventSource.CONNECTING
-window.EventSource.OPEN = OriginalEventSource.OPEN
-window.EventSource.CLOSED = OriginalEventSource.CLOSED
+Object.assign(CustomEventSource, {
+  prototype: OriginalEventSource.prototype,
+  CONNECTING: OriginalEventSource.CONNECTING,
+  OPEN: OriginalEventSource.OPEN,
+  CLOSED: OriginalEventSource.CLOSED,
+})
+window.EventSource = CustomEventSource as unknown as typeof EventSource
 
-window.postMessage({ source: 'fc-inject', type: 'REQUEST_OVERRIDES', origin: location.origin }, '*')
+window.postMessage({ source: SOURCE_INJECT, type: MSG_REQUEST_OVERRIDES, origin: location.origin }, '*')
 
 // ── OpenFeature SDK detection ─────────────────────────────────────────────
-// Intercepts window.OpenFeature assignment so we catch it the instant it's set,
-// regardless of when the app initializes the SDK relative to our script.
 
-function tryHookOpenFeature(sdk) {
+function tryHookOpenFeature(sdk: unknown): void {
   const ofProvider = getProvider('openfeature')
   if (!ofProvider) return
-  const success = ofProvider.hookSDK(sdk, () => overrides, (flags) => {
+  const success = ofProvider.hookSDK!(sdk, () => overrides, (flags: FlagsMap) => {
     currentFlags = flags
-    // Only claim openfeature if a specific provider hasn't already been detected
-    // (e.g. LD native via the LD OpenFeature adapter).
     if (!detectedProvider) setDetected('openfeature', 'sse')
     notify()
   })
@@ -233,10 +246,9 @@ function tryHookOpenFeature(sdk) {
     tryHookOpenFeature(window.OpenFeature)
     return
   }
-  // Trap the assignment — removed immediately after the first set.
   Object.defineProperty(window, 'OpenFeature', {
     configurable: true,
-    set(sdk) {
+    set(sdk: unknown) {
       Object.defineProperty(window, 'OpenFeature', { value: sdk, writable: true, configurable: true })
       tryHookOpenFeature(sdk)
     },

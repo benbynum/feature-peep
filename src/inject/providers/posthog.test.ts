@@ -13,10 +13,8 @@ const PH_PAYLOAD = {
 }
 
 describe('PostHog provider', () => {
-  let provider
+  let provider: ReturnType<typeof create>
   beforeEach(() => { provider = create() })
-
-  // ── isPayload ────────────────────────────────────────────────────────────
 
   describe('isPayload', () => {
     it('returns true for valid PostHog decide response', () => {
@@ -36,40 +34,38 @@ describe('PostHog provider', () => {
     })
   })
 
-  // ── applyPollingOverrides ────────────────────────────────────────────────
-
   describe('applyPollingOverrides', () => {
     it('returns null for non-PostHog payload', () => {
       expect(provider.applyPollingOverrides({ flags: [] }, {})).toBeNull()
     })
     it('applies boolean override', () => {
-      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'bool-flag': false })
+      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'bool-flag': false }) as typeof PH_PAYLOAD
       expect(result.featureFlags['bool-flag']).toBe(false)
     })
     it('applies string override', () => {
-      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'string-flag': 'variant-b' })
+      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'string-flag': 'variant-b' }) as typeof PH_PAYLOAD
       expect(result.featureFlags['string-flag']).toBe('variant-b')
     })
     it('applies number override', () => {
-      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'number-flag': 99 })
+      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'number-flag': 99 }) as typeof PH_PAYLOAD
       expect(result.featureFlags['number-flag']).toBe(99)
     })
     it('leaves non-overridden flags unchanged', () => {
-      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'bool-flag': false })
+      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'bool-flag': false }) as typeof PH_PAYLOAD
       expect(result.featureFlags['string-flag']).toBe('variant-a')
       expect(result.featureFlags['number-flag']).toBe(42)
     })
     it('ignores override for key not present in featureFlags', () => {
-      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'nonexistent': true })
+      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'nonexistent': true }) as typeof PH_PAYLOAD
       expect(result.featureFlags).not.toHaveProperty('nonexistent')
     })
     it('skips override when original value is non-scalar (object)', () => {
       const payload = { featureFlags: { 'obj-flag': { nested: true } } }
-      const result = provider.applyPollingOverrides(payload, { 'obj-flag': 'override' })
+      const result = provider.applyPollingOverrides(payload, { 'obj-flag': 'override' }) as typeof payload
       expect(result.featureFlags['obj-flag']).toEqual({ nested: true })
     })
     it('passes featureFlagPayloads through unmodified', () => {
-      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'string-flag': 'variant-b' })
+      const result = provider.applyPollingOverrides(PH_PAYLOAD, { 'string-flag': 'variant-b' }) as typeof PH_PAYLOAD
       expect(result.featureFlagPayloads).toEqual(PH_PAYLOAD.featureFlagPayloads)
     })
     it('does not mutate the original payload', () => {
@@ -77,8 +73,6 @@ describe('PostHog provider', () => {
       expect(PH_PAYLOAD.featureFlags['bool-flag']).toBe(true)
     })
   })
-
-  // ── normalizeFlags ───────────────────────────────────────────────────────
 
   describe('normalizeFlags', () => {
     it('maps featureFlags to { key: { value } } shape', () => {
