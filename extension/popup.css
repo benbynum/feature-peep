@@ -392,5 +392,64 @@ img.provider-logo {
 .bool-option.active-false { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 .bool-option:hover:not(.active-true):not(.active-false) { background: #f3f4f6; color: #374151; }
 
+/* ── Demo banner ─────────────────────────────────────────────── */
+
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.demo-banner-body {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.demo-banner-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #92400e;
+  flex-shrink: 0;
+}
+
+.demo-banner-text {
+  font-size: 11px;
+  color: #78350f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.demo-site-link {
+  color: #d97706;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.demo-site-link:hover { color: #92400e; }
+
+.demo-dismiss-btn {
+  background: none;
+  border: none;
+  color: #b45309;
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.demo-dismiss-btn:hover { color: #78350f; background: #fef3c7; }
+
 /* ── Utilities ───────────────────────────────────────────────── */
 .hidden { display: none !important; }

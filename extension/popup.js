@@ -29,12 +29,23 @@
     logoOnly: false
   };
 
+  // src/popup/demoFlags.ts
+  var DEMO_PROVIDER_ID = "launchdarkly";
+  var DEMO_SITE_URL = "https://demo.featurecreep.dev";
+  var DEMO_FLAGS = {
+    "enable-dark-mode": { value: false },
+    "checkout-button-color": { value: "blue" },
+    "max-items-per-page": { value: 25 },
+    "experiment-config": { value: { variant: "control", weight: 0.5 } }
+  };
+
   // src/constants.ts
   var MSG_SET_OVERRIDE = "SET_OVERRIDE";
   var MSG_CLEAR_OVERRIDE = "CLEAR_OVERRIDE";
   var MSG_CLEAR_ALL_OVERRIDES = "CLEAR_ALL_OVERRIDES";
   var MSG_FLAGS_UPDATE = "FLAGS_UPDATE";
   var MSG_GET_FLAGS = "GET_FLAGS";
+  var STORAGE_DEMO_DISABLED = "fc:onboarding:demoDisabled";
 
   // src/popup/index.ts
   var state = { flags: {}, overrides: {}, provider: null, transport: null };
@@ -42,6 +53,8 @@
   var pendingPollRefresh = false;
   var searchQuery = "";
   var searchOpen = false;
+  var demoDisabled = false;
+  var demoOverrides = {};
   var searchStateKey = "fc:searchOpen";
   var searchQueryKey = "fc:searchQuery";
   var PROVIDERS = {
@@ -85,8 +98,31 @@
     send(msg);
     if (state.transport === "polling") pendingPollRefresh = true;
   }
+  var isDemoMode = false;
+  function applyOverride(key, value) {
+    if (isDemoMode) {
+      demoOverrides[key] = value;
+      render();
+    } else {
+      sendOverride({ type: MSG_SET_OVERRIDE, key, value });
+      state.overrides[key] = value;
+      render();
+    }
+  }
+  function clearOverride(key) {
+    if (isDemoMode) {
+      delete demoOverrides[key];
+      render();
+    } else {
+      sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
+      delete state.overrides[key];
+      render();
+    }
+  }
   function render() {
-    const { flags, overrides } = state;
+    isDemoMode = !demoDisabled && Object.keys(state.flags).length === 0;
+    const flags = isDemoMode ? DEMO_FLAGS : state.flags;
+    const overrides = isDemoMode ? demoOverrides : state.overrides;
     const keys = Object.keys(flags);
     const overrideCount = Object.keys(overrides).length;
     const filteredKeys = searchQuery ? keys.filter((k) => k.toLowerCase().includes(searchQuery.toLowerCase())) : keys;
@@ -96,6 +132,7 @@
     const toolbarEl = document.getElementById("toolbar");
     const countEl = document.getElementById("override-count");
     const pollRefreshBar = document.getElementById("poll-refresh-bar");
+    const demoBanner = document.getElementById("demo-banner");
     const listEl = document.getElementById("flag-list");
     if (keys.length === 0) {
       document.body.style.height = "";
@@ -111,13 +148,21 @@
     document.body.style.height = "560px";
     emptyEl.classList.add("hidden");
     flagsEl.classList.remove("hidden");
-    const provider = state.provider || "launchdarkly";
+    const provider = (isDemoMode ? DEMO_PROVIDER_ID : state.provider) || "launchdarkly";
     const providerMeta = PROVIDERS[provider];
     badgeEl.classList.toggle("badge--light", !!providerMeta?.lightBadge);
-    badgeEl.innerHTML = providerBadgeHTML(provider, state.transport);
-    const transportLabel = state.transport === "sse" ? "streaming" : state.transport === "polling" ? "polling" : null;
-    badgeEl.title = transportLabel ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}` : `Auto-detected: ${providerMeta?.name || provider}`;
+    badgeEl.innerHTML = providerBadgeHTML(provider, isDemoMode ? null : state.transport);
+    if (isDemoMode) {
+      badgeEl.title = "Demo \u2014 no flags detected on this page";
+    } else {
+      const transportLabel = state.transport === "sse" ? "streaming" : state.transport === "polling" ? "polling" : null;
+      badgeEl.title = transportLabel ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}` : `Auto-detected: ${providerMeta?.name || provider}`;
+    }
     badgeEl.classList.remove("hidden");
+    demoBanner.classList.toggle("hidden", !isDemoMode);
+    if (isDemoMode) {
+      document.getElementById("demo-site-link").href = DEMO_SITE_URL;
+    }
     if (overrideCount > 0) {
       countEl.textContent = `${overrideCount} override${overrideCount > 1 ? "s" : ""} active`;
       toolbarEl.classList.remove("hidden");
@@ -183,13 +228,10 @@
           trueBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             if (flag.value === true) {
-              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
-              delete state.overrides[key];
+              clearOverride(key);
             } else {
-              sendOverride({ type: MSG_SET_OVERRIDE, key, value: true });
-              state.overrides[key] = true;
+              applyOverride(key, true);
             }
-            render();
           });
           const falseBtn = document.createElement("button");
           falseBtn.className = `bool-option${current === false ? " active-false" : ""}`;
@@ -197,13 +239,10 @@
           falseBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             if (flag.value === false) {
-              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
-              delete state.overrides[key];
+              clearOverride(key);
             } else {
-              sendOverride({ type: MSG_SET_OVERRIDE, key, value: false });
-              state.overrides[key] = false;
+              applyOverride(key, false);
             }
-            render();
           });
           toggleRow.appendChild(trueBtn);
           toggleRow.appendChild(falseBtn);
@@ -213,9 +252,7 @@
             restore.textContent = "restore";
             restore.addEventListener("click", (e) => {
               e.stopPropagation();
-              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
-              delete state.overrides[key];
-              render();
+              clearOverride(key);
             });
             toggleRow.appendChild(restore);
           }
@@ -237,13 +274,10 @@
               return;
             }
             if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
-              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
-              delete state.overrides[key];
+              clearOverride(key);
             } else {
-              sendOverride({ type: MSG_SET_OVERRIDE, key, value: parsed });
-              state.overrides[key] = parsed;
+              applyOverride(key, parsed);
             }
-            render();
           };
           input.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
@@ -272,9 +306,7 @@
             restore.textContent = "restore";
             restore.addEventListener("click", (e) => {
               e.stopPropagation();
-              sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
-              delete state.overrides[key];
-              render();
+              clearOverride(key);
             });
             editor.appendChild(restore);
           }
@@ -349,6 +381,11 @@
   });
   var pollRefreshBtn = document.getElementById("poll-refresh-btn");
   pollRefreshBtn.addEventListener("click", () => reloadActiveTab(pollRefreshBtn));
+  document.getElementById("demo-dismiss-btn").addEventListener("click", () => {
+    demoDisabled = true;
+    chrome.storage.local.set({ [STORAGE_DEMO_DISABLED]: true });
+    render();
+  });
   getActiveTab((tab, windowId) => {
     if (tab?.url) {
       try {
@@ -360,18 +397,32 @@
     }
     searchOpen = localStorage.getItem(searchStateKey) === "true";
     searchQuery = localStorage.getItem(searchQueryKey) || "";
-    chrome.runtime.sendMessage({ type: MSG_GET_FLAGS, tabId: tab?.id ?? null, windowId: windowId ?? null }, (response) => {
-      if (response) {
+    let flagsResponse;
+    let storageReady = false;
+    let flagsReady = false;
+    function maybeRender() {
+      if (!storageReady || !flagsReady) return;
+      if (flagsResponse) {
         state = {
-          flags: response.flags ?? {},
-          overrides: response.overrides ?? {},
-          provider: response.provider ?? null,
-          transport: response.transport ?? null
+          flags: flagsResponse.flags ?? {},
+          overrides: flagsResponse.overrides ?? {},
+          provider: flagsResponse.provider ?? null,
+          transport: flagsResponse.transport ?? null
         };
-        render();
-        applySearchOpen();
-        if (searchOpen) searchInput.focus();
       }
+      render();
+      applySearchOpen();
+      if (searchOpen) searchInput.focus();
+    }
+    chrome.storage.local.get(STORAGE_DEMO_DISABLED, (result) => {
+      demoDisabled = result[STORAGE_DEMO_DISABLED] === true;
+      storageReady = true;
+      maybeRender();
+    });
+    chrome.runtime.sendMessage({ type: MSG_GET_FLAGS, tabId: tab?.id ?? null, windowId: windowId ?? null }, (response) => {
+      flagsResponse = response;
+      flagsReady = true;
+      maybeRender();
     });
   });
   chrome.runtime.onMessage.addListener((msg) => {

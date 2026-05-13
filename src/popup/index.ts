@@ -1,9 +1,10 @@
 import { meta as ldMeta } from './providers/launchdarkly.js'
 import { meta as ofMeta } from './providers/openfeature.js'
 import { meta as phMeta } from './providers/posthog.js'
+import { DEMO_FLAGS, DEMO_PROVIDER_ID, DEMO_SITE_URL } from './demoFlags.js'
 import {
   MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
-  MSG_FLAGS_UPDATE, MSG_GET_FLAGS,
+  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_DEMO_DISABLED,
 } from '../constants.js'
 import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
 
@@ -19,6 +20,8 @@ let expandedKey: string | null = null
 let pendingPollRefresh = false
 let searchQuery = ''
 let searchOpen = false
+let demoDisabled = false
+let demoOverrides: Overrides = {}
 let searchStateKey  = 'fc:searchOpen'
 let searchQueryKey  = 'fc:searchQuery'
 
@@ -74,10 +77,38 @@ function sendOverride(msg: object): void {
   if (state.transport === 'polling') pendingPollRefresh = true
 }
 
+let isDemoMode = false
+
+function applyOverride(key: string, value: unknown): void {
+  if (isDemoMode) {
+    demoOverrides[key] = value
+    render()
+  } else {
+    sendOverride({ type: MSG_SET_OVERRIDE, key, value })
+    state.overrides[key] = value
+    render()
+  }
+}
+
+function clearOverride(key: string): void {
+  if (isDemoMode) {
+    delete demoOverrides[key]
+    render()
+  } else {
+    sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
+    delete state.overrides[key]
+    render()
+  }
+}
+
 // ── Render ────────────────────────────────────────────────────────────────
 
 function render(): void {
-  const { flags, overrides } = state
+  isDemoMode = !demoDisabled && Object.keys(state.flags).length === 0
+
+  const flags     = isDemoMode ? DEMO_FLAGS    : state.flags
+  const overrides = isDemoMode ? demoOverrides : state.overrides
+
   const keys = Object.keys(flags)
   const overrideCount = Object.keys(overrides).length
   const filteredKeys = searchQuery
@@ -90,6 +121,7 @@ function render(): void {
   const toolbarEl      = document.getElementById('toolbar')!
   const countEl        = document.getElementById('override-count')!
   const pollRefreshBar = document.getElementById('poll-refresh-bar')!
+  const demoBanner     = document.getElementById('demo-banner')!
   const listEl         = document.getElementById('flag-list')!
 
   if (keys.length === 0) {
@@ -108,15 +140,25 @@ function render(): void {
   document.body.style.height = '560px'
   emptyEl.classList.add('hidden')
   flagsEl.classList.remove('hidden')
-  const provider = state.provider || 'launchdarkly'
+
+  const provider = (isDemoMode ? DEMO_PROVIDER_ID : state.provider) || 'launchdarkly'
   const providerMeta = PROVIDERS[provider]
   badgeEl.classList.toggle('badge--light', !!providerMeta?.lightBadge)
-  badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
-  const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
-  badgeEl.title = transportLabel
-    ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}`
-    : `Auto-detected: ${providerMeta?.name || provider}`
+  badgeEl.innerHTML = providerBadgeHTML(provider, isDemoMode ? null : state.transport)
+  if (isDemoMode) {
+    badgeEl.title = 'Demo — no flags detected on this page'
+  } else {
+    const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
+    badgeEl.title = transportLabel
+      ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}`
+      : `Auto-detected: ${providerMeta?.name || provider}`
+  }
   badgeEl.classList.remove('hidden')
+
+  demoBanner.classList.toggle('hidden', !isDemoMode)
+  if (isDemoMode) {
+    (document.getElementById('demo-site-link') as HTMLAnchorElement).href = DEMO_SITE_URL
+  }
 
   if (overrideCount > 0) {
     countEl.textContent = `${overrideCount} override${overrideCount > 1 ? 's' : ''} active`
@@ -201,14 +243,7 @@ function render(): void {
         trueBtn.textContent = 'true'
         trueBtn.addEventListener('click', (e) => {
           e.stopPropagation()
-          if (flag.value === true) {
-            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
-            delete state.overrides[key]
-          } else {
-            sendOverride({ type: MSG_SET_OVERRIDE, key, value: true })
-            state.overrides[key] = true
-          }
-          render()
+          if (flag.value === true) { clearOverride(key) } else { applyOverride(key, true) }
         })
 
         const falseBtn = document.createElement('button')
@@ -216,14 +251,7 @@ function render(): void {
         falseBtn.textContent = 'false'
         falseBtn.addEventListener('click', (e) => {
           e.stopPropagation()
-          if (flag.value === false) {
-            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
-            delete state.overrides[key]
-          } else {
-            sendOverride({ type: MSG_SET_OVERRIDE, key, value: false })
-            state.overrides[key] = false
-          }
-          render()
+          if (flag.value === false) { clearOverride(key) } else { applyOverride(key, false) }
         })
 
         toggleRow.appendChild(trueBtn)
@@ -235,9 +263,7 @@ function render(): void {
           restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
-            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
-            delete state.overrides[key]
-            render()
+            clearOverride(key)
           })
           toggleRow.appendChild(restore)
         }
@@ -265,13 +291,10 @@ function render(): void {
             return
           }
           if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
-            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
-            delete state.overrides[key]
+            clearOverride(key)
           } else {
-            sendOverride({ type: MSG_SET_OVERRIDE, key, value: parsed })
-            state.overrides[key] = parsed
+            applyOverride(key, parsed)
           }
-          render()
         }
 
         input.addEventListener('keydown', (e) => {
@@ -295,9 +318,7 @@ function render(): void {
           restore.textContent = 'restore'
           restore.addEventListener('click', (e) => {
             e.stopPropagation()
-            sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
-            delete state.overrides[key]
-            render()
+            clearOverride(key)
           })
           editor.appendChild(restore)
         }
@@ -388,6 +409,12 @@ document.getElementById('clear-all-btn')!.addEventListener('click', () => {
 const pollRefreshBtn = document.getElementById('poll-refresh-btn')!
 pollRefreshBtn.addEventListener('click', () => reloadActiveTab(pollRefreshBtn))
 
+document.getElementById('demo-dismiss-btn')!.addEventListener('click', () => {
+  demoDisabled = true
+  chrome.storage.local.set({ [STORAGE_DEMO_DISABLED]: true })
+  render()
+})
+
 getActiveTab((tab, windowId) => {
   if (tab?.url) {
     try {
@@ -399,18 +426,35 @@ getActiveTab((tab, windowId) => {
   searchOpen  = localStorage.getItem(searchStateKey) === 'true'
   searchQuery = localStorage.getItem(searchQueryKey) || ''
 
-  chrome.runtime.sendMessage({ type: MSG_GET_FLAGS, tabId: tab?.id ?? null, windowId: windowId ?? null }, (response: AppState | undefined) => {
-    if (response) {
+  let flagsResponse: AppState | undefined
+  let storageReady = false
+  let flagsReady   = false
+
+  function maybeRender(): void {
+    if (!storageReady || !flagsReady) return
+    if (flagsResponse) {
       state = {
-        flags:     response.flags     ?? {},
-        overrides: response.overrides ?? {},
-        provider:  response.provider  ?? null,
-        transport: response.transport ?? null,
+        flags:     flagsResponse.flags     ?? {},
+        overrides: flagsResponse.overrides ?? {},
+        provider:  flagsResponse.provider  ?? null,
+        transport: flagsResponse.transport ?? null,
       }
-      render()
-      applySearchOpen()
-      if (searchOpen) searchInput.focus()
     }
+    render()
+    applySearchOpen()
+    if (searchOpen) searchInput.focus()
+  }
+
+  chrome.storage.local.get(STORAGE_DEMO_DISABLED, (result) => {
+    demoDisabled = result[STORAGE_DEMO_DISABLED] === true
+    storageReady = true
+    maybeRender()
+  })
+
+  chrome.runtime.sendMessage({ type: MSG_GET_FLAGS, tabId: tab?.id ?? null, windowId: windowId ?? null }, (response: AppState | undefined) => {
+    flagsResponse = response
+    flagsReady = true
+    maybeRender()
   })
 })
 
