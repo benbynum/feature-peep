@@ -31,7 +31,7 @@
 
   // src/popup/demoFlags.ts
   var DEMO_PROVIDER_ID = "launchdarkly";
-  var DEMO_SITE_URL = "https://demo.featurecreep.dev";
+  var DEMO_SITE_URL = "https://demo.featurepeep.com";
   var DEMO_FLAGS = {
     "enable-dark-mode": { value: false },
     "checkout-button-color": { value: "blue" },
@@ -347,9 +347,9 @@
       searchQuery = "";
       searchInput.value = "";
       searchClear.classList.add("hidden");
-      localStorage.removeItem(searchQueryKey);
+      chrome.storage.local.remove(searchQueryKey);
     }
-    localStorage.setItem(searchStateKey, String(searchOpen));
+    chrome.storage.local.set({ [searchStateKey]: searchOpen });
   }
   searchToggle.addEventListener("click", () => {
     searchOpen = !searchOpen;
@@ -360,14 +360,14 @@
   searchInput.addEventListener("input", () => {
     searchQuery = searchInput.value;
     searchClear.classList.toggle("hidden", !searchQuery);
-    localStorage.setItem(searchQueryKey, searchQuery);
+    chrome.storage.local.set({ [searchQueryKey]: searchQuery });
     render();
   });
   searchClear.addEventListener("click", () => {
     searchQuery = "";
     searchInput.value = "";
     searchClear.classList.add("hidden");
-    localStorage.removeItem(searchQueryKey);
+    chrome.storage.local.remove(searchQueryKey);
     searchInput.focus();
     render();
   });
@@ -395,8 +395,6 @@
       } catch (_) {
       }
     }
-    searchOpen = localStorage.getItem(searchStateKey) === "true";
-    searchQuery = localStorage.getItem(searchQueryKey) || "";
     let flagsResponse;
     let storageReady = false;
     let flagsReady = false;
@@ -414,8 +412,10 @@
       applySearchOpen();
       if (searchOpen) searchInput.focus();
     }
-    chrome.storage.local.get(STORAGE_DEMO_DISABLED, (result) => {
+    chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey], (result) => {
       demoDisabled = result[STORAGE_DEMO_DISABLED] === true;
+      searchOpen = result[searchStateKey] === true;
+      searchQuery = result[searchQueryKey] || "";
       storageReady = true;
       maybeRender();
     });

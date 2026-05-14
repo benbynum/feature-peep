@@ -368,9 +368,9 @@ function applySearchOpen(): void {
     searchQuery = ''
     searchInput.value = ''
     searchClear.classList.add('hidden')
-    localStorage.removeItem(searchQueryKey)
+    chrome.storage.local.remove(searchQueryKey)
   }
-  localStorage.setItem(searchStateKey, String(searchOpen))
+  chrome.storage.local.set({ [searchStateKey]: searchOpen })
 }
 
 searchToggle.addEventListener('click', () => {
@@ -383,7 +383,7 @@ searchToggle.addEventListener('click', () => {
 searchInput.addEventListener('input', () => {
   searchQuery = searchInput.value
   searchClear.classList.toggle('hidden', !searchQuery)
-  localStorage.setItem(searchQueryKey, searchQuery)
+  chrome.storage.local.set({ [searchQueryKey]: searchQuery })
   render()
 })
 
@@ -391,7 +391,7 @@ searchClear.addEventListener('click', () => {
   searchQuery = ''
   searchInput.value = ''
   searchClear.classList.add('hidden')
-  localStorage.removeItem(searchQueryKey)
+  chrome.storage.local.remove(searchQueryKey)
   searchInput.focus()
   render()
 })
@@ -423,9 +423,6 @@ getActiveTab((tab, windowId) => {
       searchQueryKey = `fc:searchQuery:${origin}`
     } catch (_) {}
   }
-  searchOpen  = localStorage.getItem(searchStateKey) === 'true'
-  searchQuery = localStorage.getItem(searchQueryKey) || ''
-
   let flagsResponse: AppState | undefined
   let storageReady = false
   let flagsReady   = false
@@ -445,8 +442,10 @@ getActiveTab((tab, windowId) => {
     if (searchOpen) searchInput.focus()
   }
 
-  chrome.storage.local.get(STORAGE_DEMO_DISABLED, (result) => {
+  chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey], (result) => {
     demoDisabled = result[STORAGE_DEMO_DISABLED] === true
+    searchOpen   = result[searchStateKey] === true
+    searchQuery  = (result[searchQueryKey] as string) || ''
     storageReady = true
     maybeRender()
   })

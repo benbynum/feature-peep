@@ -17,5 +17,7 @@ plans/PLAN-v*.md
 requirements/REQ-v*.md
 !requirements/*-latest.md
 
+screenshots
 screencasts
 notes.md
+privacy-brief.md

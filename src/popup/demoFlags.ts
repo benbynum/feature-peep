@@ -1,7 +1,7 @@
 import type { FlagsMap } from '../types.js'
 
 export const DEMO_PROVIDER_ID = 'launchdarkly' as const
-export const DEMO_SITE_URL = 'https://demo.featurecreep.dev'
+export const DEMO_SITE_URL = 'https://demo.featurepeep.com'
 
 export const DEMO_FLAGS: FlagsMap = {
   'enable-dark-mode':      { value: false },
