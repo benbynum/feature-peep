@@ -8,7 +8,7 @@ node_modules/
 *.mov
 *.mp4
 *.gif
-!extension/assets/feature-creep-demo-hq.gif
+!extension/assets/feature-peep-demo-hq.gif
 launchdarkly.png
 
 # Plans and requirements — track only latest versions

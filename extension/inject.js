@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/inject/log.ts
-  var log = (fmt, ...args) => console.log(`[FeatureCreep] ${fmt}`, ...args);
+  var log = (fmt, ...args) => console.log(`[FeaturePeep] ${fmt}`, ...args);
 
   // src/inject/detection.ts
   function detectProvider(url) {

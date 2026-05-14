@@ -1,12 +1,12 @@
-# FeatureCreep
+# FeaturePeep
 
 Inspect and override feature flags in real-time. Any page, any environment.
 
-![FeatureCreep demo](extension/assets/feature-creep-demo-hq.gif)
+![FeaturePeep demo](extension/assets/feature-peep-demo-hq.gif)
 
 ## Why it exists
 
-At my last company we had 100+ flags across 5 environments. There were 40 engineers. Toggling a value to smoke test a feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeatureCreep changes that!
+At my last company we had 100+ flags across 5 environments. There were 40 engineers. Toggling a value to smoke test a feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeaturePeep changes that!
 
 - Auto-detect which provider is implemented
 - See which flags are active on any page instantly
@@ -48,7 +48,7 @@ See [SECURITY.md](SECURITY.md) for extension permissions rationale, known securi
 
 ## Privacy
 
-FeatureCreep collects no user data. It does not make network requests of its own, transmit anything to external servers, or communicate with provider APIs. All flag data is read locally from your browser's existing SDK traffic. Overrides are stored in your browser's local extension storage and never leave your device.
+FeaturePeep collects no user data. It does not make network requests of its own, transmit anything to external servers, or communicate with provider APIs. All flag data is read locally from your browser's existing SDK traffic. Overrides are stored in your browser's local extension storage and never leave your device.
 
 ## Scope
 
