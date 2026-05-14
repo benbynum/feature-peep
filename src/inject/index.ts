@@ -38,6 +38,10 @@ function notify(): void {
 }
 
 function setDetected(id: ProviderId, transport: Transport): void {
+  // Don't downgrade SSE to polling for the same provider — LD (and others) make
+  // a polling evaluation request alongside streaming; whichever lands last would
+  // otherwise clobber the transport and break fireFakePut.
+  if (detectedProvider === id && detectedTransport === 'sse' && transport === 'polling') return
   detectedProvider = id
   detectedTransport = transport
 }

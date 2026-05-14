@@ -418,6 +418,7 @@
     }, "*");
   }
   function setDetected(id, transport) {
+    if (detectedProvider === id && detectedTransport === "sse" && transport === "polling") return;
     detectedProvider = id;
     detectedTransport = transport;
   }
