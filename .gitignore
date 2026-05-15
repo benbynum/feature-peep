@@ -11,11 +11,9 @@ node_modules/
 !extension/assets/feature-peep-demo-hq.gif
 launchdarkly.png
 
-# Plans and requirements — track only latest versions
-plans/PLAN-v*.md
-!plans/*-latest.md
-requirements/REQ-v*.md
-!requirements/*-latest.md
+# Plans and requirements — internal only
+plans/
+requirements/
 
 screenshots
 screencasts

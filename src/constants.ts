@@ -13,4 +13,5 @@ export const STORAGE_OVERRIDES_PREFIX = 'fc:overrides:' as const
 export const STORAGE_THEME            = 'fc:theme' as const
 export const STORAGE_LAST_FEEDBACK    = 'fc:feedback:lastSent' as const
 
+// Public by design (Formspree); do not call in tests or automated scripts
 export const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mkoydwwg' as const
