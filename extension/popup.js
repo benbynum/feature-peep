@@ -30,7 +30,7 @@
   };
 
   // src/popup/demoFlags.ts
-  var DEMO_SITE_URL = "https://demo.featurepeep.com";
+  var DEMO_SITE_URL = "https://featurepeep.com";
 
   // src/constants.ts
   var MSG_SET_OVERRIDE = "SET_OVERRIDE";
@@ -449,6 +449,24 @@
     feedbackCharCount.textContent = `${len} / 200`;
     feedbackCharCount.classList.toggle("over-limit", len > 180);
   });
+  function setFeedbackError(el, status) {
+    el.textContent = "";
+    if (status === 402) {
+      el.appendChild(document.createTextNode("Monthly feedback quota from all users has been hit. Try again next month or submit feedback on "));
+      const a = document.createElement("a");
+      a.href = GITHUB_ISSUES_URL;
+      a.target = "_blank";
+      a.textContent = "GitHub";
+      el.appendChild(a);
+      el.appendChild(document.createTextNode("."));
+    } else if (status === 422) {
+      el.textContent = "Your message was flagged as spam. If this is an error, please reach out directly.";
+    } else if (status === 429) {
+      el.textContent = "Too many requests \u2014 please try again in a few minutes.";
+    } else {
+      el.textContent = "Something went wrong \u2014 please try again.";
+    }
+  }
   document.getElementById("feedback-submit-btn").addEventListener("click", async () => {
     const msg = feedbackTextarea.value.trim();
     if (!msg) return;
@@ -456,11 +474,6 @@
     btn.disabled = true;
     btn.textContent = "Sending\u2026";
     const errEl = document.getElementById("feedback-submit-error");
-    const errorMessages = {
-      402: `Monthly feedback quota from all users has been hit. Try again next month or submit feedback on <a href="${GITHUB_ISSUES_URL}" target="_blank">GitHub</a>.`,
-      422: "Your message was flagged as spam. If this is an error, please reach out directly.",
-      429: "Too many requests \u2014 please try again in a few minutes."
-    };
     try {
       const res = await fetch(FORMSPREE_ENDPOINT, {
         method: "POST",
@@ -468,7 +481,7 @@
         body: JSON.stringify({ message: msg, _subject: "[FeaturePeep Feedback]" })
       });
       if (!res.ok) {
-        errEl.innerHTML = errorMessages[res.status] ?? "Something went wrong \u2014 please try again.";
+        setFeedbackError(errEl, res.status);
         errEl.classList.remove("hidden");
         btn.disabled = false;
         btn.textContent = "Send";
@@ -478,7 +491,7 @@
       document.getElementById("feedback-compose").classList.add("hidden");
       document.getElementById("feedback-success").classList.remove("hidden");
     } catch {
-      errEl.innerHTML = "Something went wrong \u2014 please try again.";
+      errEl.textContent = "Something went wrong \u2014 please try again.";
       errEl.classList.remove("hidden");
       btn.disabled = false;
       btn.textContent = "Send";

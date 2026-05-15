@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Open a [GitHub issue](https://github.com/benbynum/feature-creep/issues) for general bugs. For sensitive security issues please email **benbynum@gmail.com** with a description of the issue and steps to reproduce. You can expect a response within a few days.
+Open a [GitHub issue](https://github.com/benbynum/feature-peep/issues) for general bugs. For sensitive security issues please email **benbynum@gmail.com** with a description of the issue and steps to reproduce. You can expect a response within a few days.
 
 ## Known security characteristics
 
