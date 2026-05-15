@@ -28,8 +28,8 @@
       </header>
 
       <div id="state-empty" class="state-message">
-        <p>
-          No feature flags detected on this page
+        <p class="empty-main">
+          <span>No flags detected, try a page refresh.</span>
           <button id="retry-btn" class="retry-btn" title="Refresh flags">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="23 4 23 10 17 10"/>
@@ -38,20 +38,15 @@
           </button>
         </p>
         <p class="hint">Flags appear once the SDK initializes.</p>
+        <p class="hint">
+          <button id="view-demo-btn" class="view-demo-btn">View demo</button>
+          <span class="info-icon" data-tooltip="View a demo page which has flags you can interact with.">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </span>
+        </p>
       </div>
 
       <div id="state-flags" class="hidden">
-        <div id="demo-banner" class="demo-banner hidden">
-          <div class="demo-banner-body">
-            <span class="demo-banner-label">Demo</span>
-            <span class="demo-banner-text">No flags detected. See it live on a <a id="demo-site-link" href="#" target="_blank" class="demo-site-link">demo page →</a></span>
-          </div>
-          <button id="demo-dismiss-btn" class="demo-dismiss-btn" aria-label="Dismiss demo">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
         <div id="search-bar" class="search-bar hidden">
           <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -120,7 +115,12 @@
             </svg>
           </button>
           <div class="settings-link-row settings-link-row--disabled">
-            <span>Send Feedback</span>
+            <span class="settings-label-group">
+              Send Feedback
+              <span class="info-icon" data-tooltip="Submit a bug, request provider support, or share other thoughts here">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </span>
+            </span>
             <span class="settings-coming-soon">Coming soon</span>
           </div>
         </div>

@@ -1,10 +1,10 @@
 import { meta as ldMeta } from './providers/launchdarkly.js'
 import { meta as ofMeta } from './providers/openfeature.js'
 import { meta as phMeta } from './providers/posthog.js'
-import { DEMO_FLAGS, DEMO_PROVIDER_ID, DEMO_SITE_URL } from './demoFlags.js'
+import { DEMO_SITE_URL } from './demoFlags.js'
 import {
   MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
-  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_DEMO_DISABLED, STORAGE_THEME,
+  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_THEME,
 } from '../constants.js'
 import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
 
@@ -20,10 +20,8 @@ let expandedKey: string | null = null
 let pendingPollRefresh = false
 let searchQuery = ''
 let searchOpen = false
-let demoDisabled = false
-let demoOverrides: Overrides = {}
-let searchStateKey  = 'fc:searchOpen'
-let searchQueryKey  = 'fc:searchQuery'
+let searchStateKey = 'fc:searchOpen'
+let searchQueryKey = 'fc:searchQuery'
 
 const PROVIDERS: Record<string, ProviderMeta> = {
   [ldMeta.id]: ldMeta,
@@ -77,37 +75,23 @@ function sendOverride(msg: object): void {
   if (state.transport === 'polling') pendingPollRefresh = true
 }
 
-let isDemoMode = false
-
 function applyOverride(key: string, value: unknown): void {
-  if (isDemoMode) {
-    demoOverrides[key] = value
-    render()
-  } else {
-    sendOverride({ type: MSG_SET_OVERRIDE, key, value })
-    state.overrides[key] = value
-    render()
-  }
+  sendOverride({ type: MSG_SET_OVERRIDE, key, value })
+  state.overrides[key] = value
+  render()
 }
 
 function clearOverride(key: string): void {
-  if (isDemoMode) {
-    delete demoOverrides[key]
-    render()
-  } else {
-    sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
-    delete state.overrides[key]
-    render()
-  }
+  sendOverride({ type: MSG_CLEAR_OVERRIDE, key })
+  delete state.overrides[key]
+  render()
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
 
 function render(): void {
-  isDemoMode = !demoDisabled && Object.keys(state.flags).length === 0
-
-  const flags     = isDemoMode ? DEMO_FLAGS    : state.flags
-  const overrides = isDemoMode ? demoOverrides : state.overrides
+  const flags     = state.flags
+  const overrides = state.overrides
 
   const keys = Object.keys(flags)
   const overrideCount = Object.keys(overrides).length
@@ -121,7 +105,6 @@ function render(): void {
   const overrideInfoEl = document.getElementById('override-info')!
   const countEl        = document.getElementById('override-count')!
   const pollRefreshBar = document.getElementById('poll-refresh-bar')!
-  const demoBanner     = document.getElementById('demo-banner')!
   const listEl         = document.getElementById('flag-list')!
 
   if (keys.length === 0) {
@@ -141,24 +124,15 @@ function render(): void {
   emptyEl.classList.add('hidden')
   flagsEl.classList.remove('hidden')
 
-  const provider = (isDemoMode ? DEMO_PROVIDER_ID : state.provider) || 'launchdarkly'
+  const provider = state.provider || 'launchdarkly'
   const providerMeta = PROVIDERS[provider]
   badgeEl.classList.toggle('badge--light', !!providerMeta?.lightBadge)
-  badgeEl.innerHTML = providerBadgeHTML(provider, isDemoMode ? null : state.transport)
-  if (isDemoMode) {
-    badgeEl.title = 'Demo — no flags detected on this page'
-  } else {
-    const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
-    badgeEl.title = transportLabel
-      ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}`
-      : `Auto-detected: ${providerMeta?.name || provider}`
-  }
+  badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
+  const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
+  badgeEl.title = transportLabel
+    ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}`
+    : `Auto-detected: ${providerMeta?.name || provider}`
   badgeEl.classList.remove('hidden')
-
-  demoBanner.classList.toggle('hidden', !isDemoMode)
-  if (isDemoMode) {
-    (document.getElementById('demo-site-link') as HTMLAnchorElement).href = DEMO_SITE_URL
-  }
 
   overrideInfoEl.classList.toggle('hidden', overrideCount === 0)
   if (overrideCount > 0) {
@@ -409,7 +383,7 @@ document.getElementById('clear-all-btn')!.addEventListener('click', () => {
 document.getElementById('settings-version')!.textContent =
   chrome.runtime.getManifest().version
 
-function updateThemeButtons(): void {
+function updateSettingsButtons(): void {
   const isDark = document.body.classList.contains('dark')
   document.getElementById('theme-light-btn')!.classList.toggle('active', !isDark)
   document.getElementById('theme-dark-btn')!.classList.toggle('active', isDark)
@@ -418,18 +392,18 @@ function updateThemeButtons(): void {
 function setTheme(theme: 'light' | 'dark'): void {
   document.body.classList.toggle('dark', theme === 'dark')
   chrome.storage.local.set({ [STORAGE_THEME]: theme })
-  updateThemeButtons()
+  updateSettingsButtons()
 }
 
 function openSettings(): void {
   document.body.classList.add('settings-open')
   document.body.style.height = '560px'
-  updateThemeButtons()
+  updateSettingsButtons()
 }
 
 function closeSettings(): void {
   document.body.classList.remove('settings-open')
-  if (Object.keys(state.flags).length === 0) document.body.style.height = ''
+  render()
 }
 
 document.getElementById('settings-btn')!.addEventListener('click', openSettings)
@@ -441,18 +415,16 @@ for (const id of ['settings-back-btn', 'settings-back-btn-footer']) {
 document.getElementById('theme-light-btn')!.addEventListener('click', () => setTheme('light'))
 document.getElementById('theme-dark-btn')!.addEventListener('click', () => setTheme('dark'))
 
+document.getElementById('view-demo-btn')!.addEventListener('click', () => {
+  chrome.tabs.create({ url: DEMO_SITE_URL })
+})
+
 document.getElementById('privacy-link-btn')!.addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://featurepeep.com/privacy' })
 })
 
 const pollRefreshBtn = document.getElementById('poll-refresh-btn')!
 pollRefreshBtn.addEventListener('click', () => reloadActiveTab(pollRefreshBtn))
-
-document.getElementById('demo-dismiss-btn')!.addEventListener('click', () => {
-  demoDisabled = true
-  chrome.storage.local.set({ [STORAGE_DEMO_DISABLED]: true })
-  render()
-})
 
 getActiveTab((tab, windowId) => {
   if (tab?.url) {
@@ -481,10 +453,9 @@ getActiveTab((tab, windowId) => {
     if (searchOpen) searchInput.focus()
   }
 
-  chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
-    demoDisabled = result[STORAGE_DEMO_DISABLED] === true
-    searchOpen   = result[searchStateKey] === true
-    searchQuery  = (result[searchQueryKey] as string) || ''
+  chrome.storage.local.get([searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
+    searchOpen  = result[searchStateKey] === true
+    searchQuery = (result[searchQueryKey] as string) || ''
     if (result[STORAGE_THEME] === 'dark') document.body.classList.add('dark')
     storageReady = true
     maybeRender()

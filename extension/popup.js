@@ -30,14 +30,7 @@
   };
 
   // src/popup/demoFlags.ts
-  var DEMO_PROVIDER_ID = "launchdarkly";
   var DEMO_SITE_URL = "https://demo.featurepeep.com";
-  var DEMO_FLAGS = {
-    "enable-dark-mode": { value: false },
-    "checkout-button-color": { value: "blue" },
-    "max-items-per-page": { value: 25 },
-    "experiment-config": { value: { variant: "control", weight: 0.5 } }
-  };
 
   // src/constants.ts
   var MSG_SET_OVERRIDE = "SET_OVERRIDE";
@@ -45,7 +38,6 @@
   var MSG_CLEAR_ALL_OVERRIDES = "CLEAR_ALL_OVERRIDES";
   var MSG_FLAGS_UPDATE = "FLAGS_UPDATE";
   var MSG_GET_FLAGS = "GET_FLAGS";
-  var STORAGE_DEMO_DISABLED = "fc:onboarding:demoDisabled";
   var STORAGE_THEME = "fc:theme";
 
   // src/popup/index.ts
@@ -54,8 +46,6 @@
   var pendingPollRefresh = false;
   var searchQuery = "";
   var searchOpen = false;
-  var demoDisabled = false;
-  var demoOverrides = {};
   var searchStateKey = "fc:searchOpen";
   var searchQueryKey = "fc:searchQuery";
   var PROVIDERS = {
@@ -99,31 +89,19 @@
     send(msg);
     if (state.transport === "polling") pendingPollRefresh = true;
   }
-  var isDemoMode = false;
   function applyOverride(key, value) {
-    if (isDemoMode) {
-      demoOverrides[key] = value;
-      render();
-    } else {
-      sendOverride({ type: MSG_SET_OVERRIDE, key, value });
-      state.overrides[key] = value;
-      render();
-    }
+    sendOverride({ type: MSG_SET_OVERRIDE, key, value });
+    state.overrides[key] = value;
+    render();
   }
   function clearOverride(key) {
-    if (isDemoMode) {
-      delete demoOverrides[key];
-      render();
-    } else {
-      sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
-      delete state.overrides[key];
-      render();
-    }
+    sendOverride({ type: MSG_CLEAR_OVERRIDE, key });
+    delete state.overrides[key];
+    render();
   }
   function render() {
-    isDemoMode = !demoDisabled && Object.keys(state.flags).length === 0;
-    const flags = isDemoMode ? DEMO_FLAGS : state.flags;
-    const overrides = isDemoMode ? demoOverrides : state.overrides;
+    const flags = state.flags;
+    const overrides = state.overrides;
     const keys = Object.keys(flags);
     const overrideCount = Object.keys(overrides).length;
     const filteredKeys = searchQuery ? keys.filter((k) => k.toLowerCase().includes(searchQuery.toLowerCase())) : keys;
@@ -133,7 +111,6 @@
     const overrideInfoEl = document.getElementById("override-info");
     const countEl = document.getElementById("override-count");
     const pollRefreshBar = document.getElementById("poll-refresh-bar");
-    const demoBanner = document.getElementById("demo-banner");
     const listEl = document.getElementById("flag-list");
     if (keys.length === 0) {
       document.body.style.height = "";
@@ -149,21 +126,13 @@
     document.body.style.height = "560px";
     emptyEl.classList.add("hidden");
     flagsEl.classList.remove("hidden");
-    const provider = (isDemoMode ? DEMO_PROVIDER_ID : state.provider) || "launchdarkly";
+    const provider = state.provider || "launchdarkly";
     const providerMeta = PROVIDERS[provider];
     badgeEl.classList.toggle("badge--light", !!providerMeta?.lightBadge);
-    badgeEl.innerHTML = providerBadgeHTML(provider, isDemoMode ? null : state.transport);
-    if (isDemoMode) {
-      badgeEl.title = "Demo \u2014 no flags detected on this page";
-    } else {
-      const transportLabel = state.transport === "sse" ? "streaming" : state.transport === "polling" ? "polling" : null;
-      badgeEl.title = transportLabel ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}` : `Auto-detected: ${providerMeta?.name || provider}`;
-    }
+    badgeEl.innerHTML = providerBadgeHTML(provider, state.transport);
+    const transportLabel = state.transport === "sse" ? "streaming" : state.transport === "polling" ? "polling" : null;
+    badgeEl.title = transportLabel ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}` : `Auto-detected: ${providerMeta?.name || provider}`;
     badgeEl.classList.remove("hidden");
-    demoBanner.classList.toggle("hidden", !isDemoMode);
-    if (isDemoMode) {
-      document.getElementById("demo-site-link").href = DEMO_SITE_URL;
-    }
     overrideInfoEl.classList.toggle("hidden", overrideCount === 0);
     if (overrideCount > 0) {
       countEl.textContent = `${overrideCount} override${overrideCount > 1 ? "s" : ""} active`;
@@ -379,7 +348,7 @@
     render();
   });
   document.getElementById("settings-version").textContent = chrome.runtime.getManifest().version;
-  function updateThemeButtons() {
+  function updateSettingsButtons() {
     const isDark = document.body.classList.contains("dark");
     document.getElementById("theme-light-btn").classList.toggle("active", !isDark);
     document.getElementById("theme-dark-btn").classList.toggle("active", isDark);
@@ -387,16 +356,16 @@
   function setTheme(theme) {
     document.body.classList.toggle("dark", theme === "dark");
     chrome.storage.local.set({ [STORAGE_THEME]: theme });
-    updateThemeButtons();
+    updateSettingsButtons();
   }
   function openSettings() {
     document.body.classList.add("settings-open");
     document.body.style.height = "560px";
-    updateThemeButtons();
+    updateSettingsButtons();
   }
   function closeSettings() {
     document.body.classList.remove("settings-open");
-    if (Object.keys(state.flags).length === 0) document.body.style.height = "";
+    render();
   }
   document.getElementById("settings-btn").addEventListener("click", openSettings);
   for (const id of ["settings-back-btn", "settings-back-btn-footer"]) {
@@ -404,16 +373,14 @@
   }
   document.getElementById("theme-light-btn").addEventListener("click", () => setTheme("light"));
   document.getElementById("theme-dark-btn").addEventListener("click", () => setTheme("dark"));
+  document.getElementById("view-demo-btn").addEventListener("click", () => {
+    chrome.tabs.create({ url: DEMO_SITE_URL });
+  });
   document.getElementById("privacy-link-btn").addEventListener("click", () => {
     chrome.tabs.create({ url: "https://featurepeep.com/privacy" });
   });
   var pollRefreshBtn = document.getElementById("poll-refresh-btn");
   pollRefreshBtn.addEventListener("click", () => reloadActiveTab(pollRefreshBtn));
-  document.getElementById("demo-dismiss-btn").addEventListener("click", () => {
-    demoDisabled = true;
-    chrome.storage.local.set({ [STORAGE_DEMO_DISABLED]: true });
-    render();
-  });
   getActiveTab((tab, windowId) => {
     if (tab?.url) {
       try {
@@ -440,8 +407,7 @@
       applySearchOpen();
       if (searchOpen) searchInput.focus();
     }
-    chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
-      demoDisabled = result[STORAGE_DEMO_DISABLED] === true;
+    chrome.storage.local.get([searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
       searchOpen = result[searchStateKey] === true;
       searchQuery = result[searchQueryKey] || "";
       if (result[STORAGE_THEME] === "dark") document.body.classList.add("dark");
