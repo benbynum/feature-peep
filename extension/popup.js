@@ -130,7 +130,7 @@
     const emptyEl = document.getElementById("state-empty");
     const flagsEl = document.getElementById("state-flags");
     const badgeEl = document.getElementById("provider-badge");
-    const toolbarEl = document.getElementById("toolbar");
+    const overrideInfoEl = document.getElementById("override-info");
     const countEl = document.getElementById("override-count");
     const pollRefreshBar = document.getElementById("poll-refresh-bar");
     const demoBanner = document.getElementById("demo-banner");
@@ -140,7 +140,7 @@
       emptyEl.classList.remove("hidden");
       flagsEl.classList.add("hidden");
       badgeEl.classList.add("hidden");
-      toolbarEl.classList.add("hidden");
+      overrideInfoEl.classList.add("hidden");
       searchToggle.classList.add("hidden");
       return;
     }
@@ -164,11 +164,9 @@
     if (isDemoMode) {
       document.getElementById("demo-site-link").href = DEMO_SITE_URL;
     }
+    overrideInfoEl.classList.toggle("hidden", overrideCount === 0);
     if (overrideCount > 0) {
       countEl.textContent = `${overrideCount} override${overrideCount > 1 ? "s" : ""} active`;
-      toolbarEl.classList.remove("hidden");
-    } else {
-      toolbarEl.classList.add("hidden");
     }
     if (pendingPollRefresh && state.transport === "polling") {
       pollRefreshBar.classList.remove("hidden");
@@ -379,6 +377,35 @@
     state.overrides = {};
     expandedKey = null;
     render();
+  });
+  document.getElementById("settings-version").textContent = chrome.runtime.getManifest().version;
+  function updateThemeButtons() {
+    const isDark = document.body.classList.contains("dark");
+    document.getElementById("theme-light-btn").classList.toggle("active", !isDark);
+    document.getElementById("theme-dark-btn").classList.toggle("active", isDark);
+  }
+  function setTheme(theme) {
+    document.body.classList.toggle("dark", theme === "dark");
+    chrome.storage.local.set({ [STORAGE_THEME]: theme });
+    updateThemeButtons();
+  }
+  function openSettings() {
+    document.body.classList.add("settings-open");
+    document.body.style.height = "560px";
+    updateThemeButtons();
+  }
+  function closeSettings() {
+    document.body.classList.remove("settings-open");
+    if (Object.keys(state.flags).length === 0) document.body.style.height = "";
+  }
+  document.getElementById("settings-btn").addEventListener("click", openSettings);
+  for (const id of ["settings-back-btn", "settings-back-btn-footer"]) {
+    document.getElementById(id).addEventListener("click", closeSettings);
+  }
+  document.getElementById("theme-light-btn").addEventListener("click", () => setTheme("light"));
+  document.getElementById("theme-dark-btn").addEventListener("click", () => setTheme("dark"));
+  document.getElementById("privacy-link-btn").addEventListener("click", () => {
+    chrome.tabs.create({ url: "https://featurepeep.com/privacy" });
   });
   var pollRefreshBtn = document.getElementById("poll-refresh-btn");
   pollRefreshBtn.addEventListener("click", () => reloadActiveTab(pollRefreshBtn));

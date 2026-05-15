@@ -11,74 +11,135 @@
 </head>
 <body>
   <div id="app">
-    <header>
-      <div class="header-left">
-        <svg class="logo" width="14" height="14" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 17 89 L 17 11 A 5 5 0 0 1 22 6 L 85 6 A 5 5 0 0 1 90 11 L 90 22 L 61 29 L 90 36 L 90 47 A 5 5 0 0 1 85 52 L 30 52 L 30 89 A 6.5 6.5 0 0 1 23.5 95.5 A 6.5 6.5 0 0 1 17 89 Z"/></svg>
-        <span class="title">FeaturePeep</span>
+    <div id="view-main">
+      <header>
+        <div class="header-left">
+          <svg class="logo" width="14" height="14" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 17 89 L 17 11 A 5 5 0 0 1 22 6 L 85 6 A 5 5 0 0 1 90 11 L 90 22 L 61 29 L 90 36 L 90 47 A 5 5 0 0 1 85 52 L 30 52 L 30 89 A 6.5 6.5 0 0 1 23.5 95.5 A 6.5 6.5 0 0 1 17 89 Z"/></svg>
+          <span class="title">FeaturePeep</span>
+        </div>
+        <div class="header-right">
+          <span id="provider-badge" class="badge hidden"></span>
+          <button id="search-toggle" class="search-toggle hidden" aria-label="Search flags">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="state-empty" class="state-message">
+        <p>
+          No feature flags detected on this page
+          <button id="retry-btn" class="retry-btn" title="Refresh flags">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+        </p>
+        <p class="hint">Flags appear once the SDK initializes.</p>
       </div>
-      <div class="header-right">
-        <span id="provider-badge" class="badge hidden"></span>
-        <button id="search-toggle" class="search-toggle hidden" aria-label="Search flags">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+
+      <div id="state-flags" class="hidden">
+        <div id="demo-banner" class="demo-banner hidden">
+          <div class="demo-banner-body">
+            <span class="demo-banner-label">Demo</span>
+            <span class="demo-banner-text">No flags detected. See it live on a <a id="demo-site-link" href="#" target="_blank" class="demo-site-link">demo page →</a></span>
+          </div>
+          <button id="demo-dismiss-btn" class="demo-dismiss-btn" aria-label="Dismiss demo">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div id="search-bar" class="search-bar hidden">
+          <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-        </button>
-      </div>
-    </header>
-
-    <div id="state-empty" class="state-message">
-      <p>
-        No feature flags detected on this page
-        <button id="retry-btn" class="retry-btn" title="Refresh flags">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-        </button>
-      </p>
-      <p class="hint">Flags appear once the SDK initializes.</p>
-    </div>
-
-    <div id="state-flags" class="hidden">
-      <div id="demo-banner" class="demo-banner hidden">
-        <div class="demo-banner-body">
-          <span class="demo-banner-label">Demo</span>
-          <span class="demo-banner-text">No flags detected. See it live on a <a id="demo-site-link" href="#" target="_blank" class="demo-site-link">demo page →</a></span>
+          <input id="search-input" class="search-input" type="text" placeholder="Flag name" autocomplete="off" spellcheck="false" />
+          <button id="search-clear" class="search-clear hidden" aria-label="Clear search">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
-        <button id="demo-dismiss-btn" class="demo-dismiss-btn" aria-label="Dismiss demo">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <div id="poll-refresh-bar" class="poll-refresh-bar hidden">
+          <span class="poll-refresh-hint">Polled flags require a page refresh</span>
+          <button id="poll-refresh-btn" class="poll-refresh-btn" title="Reload page to apply overrides">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Reload
+          </button>
+        </div>
+        <ul id="flag-list"></ul>
       </div>
-      <div id="search-bar" class="search-bar hidden">
-        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input id="search-input" class="search-input" type="text" placeholder="Flag name" autocomplete="off" spellcheck="false" />
-        <button id="search-clear" class="search-clear hidden" aria-label="Clear search">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div id="poll-refresh-bar" class="poll-refresh-bar hidden">
-        <span class="poll-refresh-hint">Polled flags require a page refresh</span>
-        <button id="poll-refresh-btn" class="poll-refresh-btn" title="Reload page to apply overrides">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-          Reload
-        </button>
-      </div>
-      <ul id="flag-list"></ul>
-    </div>
 
-    <div id="toolbar" class="toolbar hidden">
-      <span id="override-count" class="override-count"></span>
-      <button id="clear-all-btn" class="clear-all">Clear all overrides</button>
-    </div>
+      <div id="footer" class="footer">
+        <div id="override-info" class="override-info hidden">
+          <span id="override-count" class="override-count"></span>
+          <button id="clear-all-btn" class="clear-all">Clear all</button>
+        </div>
+        <button id="settings-btn" class="footer-icon-btn" aria-label="Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </div><!-- /#view-main -->
+
+    <div id="view-settings" class="settings-overlay">
+      <div class="settings-nav">
+        <button id="settings-back-btn" class="footer-icon-btn settings-nav-back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <span class="settings-nav-title">Settings</span>
+      </div>
+
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="settings-row">
+            <span class="settings-row-label">Theme</span>
+            <div class="theme-segmented">
+              <button id="theme-light-btn" class="theme-seg-btn">Light</button>
+              <button id="theme-dark-btn" class="theme-seg-btn">Dark</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <button id="privacy-link-btn" class="settings-link-row">
+            <span>Privacy Policy</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </button>
+          <div class="settings-link-row settings-link-row--disabled">
+            <span>Send Feedback</span>
+            <span class="settings-coming-soon">Coming soon</span>
+          </div>
+        </div>
+
+        <div class="settings-section settings-section--about">
+          <svg class="about-logo" width="22" height="22" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 17 89 L 17 11 A 5 5 0 0 1 22 6 L 85 6 A 5 5 0 0 1 90 11 L 90 22 L 61 29 L 90 36 L 90 47 A 5 5 0 0 1 85 52 L 30 52 L 30 89 A 6.5 6.5 0 0 1 23.5 95.5 A 6.5 6.5 0 0 1 17 89 Z"/></svg>
+          <div class="about-name">FeaturePeep</div>
+          <div class="about-version">v<span id="settings-version"></span></div>
+        </div>
+      </div>
+
+      <div class="settings-footer footer">
+        <button id="settings-back-btn-footer" class="footer-icon-btn settings-nav-back" aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+      </div>
+    </div><!-- /#view-settings -->
   </div>
   <script src="popup.js"></script>
 </body>
