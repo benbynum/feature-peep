@@ -46,6 +46,7 @@
   var MSG_FLAGS_UPDATE = "FLAGS_UPDATE";
   var MSG_GET_FLAGS = "GET_FLAGS";
   var STORAGE_DEMO_DISABLED = "fc:onboarding:demoDisabled";
+  var STORAGE_THEME = "fc:theme";
 
   // src/popup/index.ts
   var state = { flags: {}, overrides: {}, provider: null, transport: null };
@@ -270,7 +271,7 @@
             try {
               parsed = type === "string" ? input.value : JSON.parse(input.value);
             } catch (_) {
-              input.style.borderColor = "#dc2626";
+              input.style.borderColor = getComputedStyle(document.body).getPropertyValue("--val-bool-false").trim();
               return;
             }
             if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
@@ -412,10 +413,11 @@
       applySearchOpen();
       if (searchOpen) searchInput.focus();
     }
-    chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey], (result) => {
+    chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
       demoDisabled = result[STORAGE_DEMO_DISABLED] === true;
       searchOpen = result[searchStateKey] === true;
       searchQuery = result[searchQueryKey] || "";
+      if (result[STORAGE_THEME] === "dark") document.body.classList.add("dark");
       storageReady = true;
       maybeRender();
     });

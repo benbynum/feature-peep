@@ -4,7 +4,7 @@ import { meta as phMeta } from './providers/posthog.js'
 import { DEMO_FLAGS, DEMO_PROVIDER_ID, DEMO_SITE_URL } from './demoFlags.js'
 import {
   MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
-  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_DEMO_DISABLED,
+  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_DEMO_DISABLED, STORAGE_THEME,
 } from '../constants.js'
 import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
 
@@ -287,7 +287,7 @@ function render(): void {
           try {
             parsed = type === 'string' ? input.value : JSON.parse(input.value)
           } catch (_) {
-            input.style.borderColor = '#dc2626'
+            input.style.borderColor = getComputedStyle(document.body).getPropertyValue('--val-bool-false').trim()
             return
           }
           if (JSON.stringify(parsed) === JSON.stringify(flag.value)) {
@@ -442,10 +442,11 @@ getActiveTab((tab, windowId) => {
     if (searchOpen) searchInput.focus()
   }
 
-  chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey], (result) => {
+  chrome.storage.local.get([STORAGE_DEMO_DISABLED, searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
     demoDisabled = result[STORAGE_DEMO_DISABLED] === true
     searchOpen   = result[searchStateKey] === true
     searchQuery  = (result[searchQueryKey] as string) || ''
+    if (result[STORAGE_THEME] === 'dark') document.body.classList.add('dark')
     storageReady = true
     maybeRender()
   })
