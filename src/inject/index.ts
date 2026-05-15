@@ -40,7 +40,7 @@ function notify(): void {
 function setDetected(id: ProviderId, transport: Transport): void {
   // Don't downgrade SSE to polling for the same provider — LD (and others) make
   // a polling evaluation request alongside streaming; whichever lands last would
-  // otherwise clobber the transport and break fireFakePut.
+  // otherwise clobber the transport and break dispatchFlagsUpdate.
   if (detectedProvider === id && detectedTransport === 'sse' && transport === 'polling') return
   detectedProvider = id
   detectedTransport = transport
@@ -51,7 +51,7 @@ function setDetected(id: ProviderId, transport: Transport): void {
 function applyOverrideImmediate(): void {
   log('applyOverrideImmediate: transport=%s, provider=%s', detectedTransport, detectedProvider)
   if (detectedTransport === 'sse') {
-    getProvider(detectedProvider)?.fireFakePut(currentFlags, overrides, notify)
+    getProvider(detectedProvider)?.dispatchFlagsUpdate(currentFlags, overrides, notify)
   }
 }
 
@@ -237,7 +237,7 @@ window.postMessage({ source: SOURCE_INJECT, type: MSG_REQUEST_OVERRIDES, origin:
 function tryHookOpenFeature(sdk: unknown): void {
   const ofProvider = getProvider('openfeature')
   if (!ofProvider) return
-  const success = ofProvider.hookSDK!(sdk, () => overrides, (flags: FlagsMap) => {
+  const success = ofProvider.instrumentSDK!(sdk, () => overrides, (flags: FlagsMap) => {
     currentFlags = flags
     if (!detectedProvider) setDetected('openfeature', 'sse')
     notify()

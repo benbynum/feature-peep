@@ -122,29 +122,29 @@ describe('LaunchDarkly provider', () => {
     })
   })
 
-  describe('fireFakePut', () => {
+  describe('dispatchFlagsUpdate', () => {
     it('does not call notifyFn when there are no listeners', () => {
       const notify = vi.fn()
-      provider.fireFakePut(LD_PAYLOAD, {}, notify)
+      provider.dispatchFlagsUpdate(LD_PAYLOAD, {}, notify)
       expect(notify).not.toHaveBeenCalled()
     })
     it('fires a synthetic put event to each registered listener', () => {
       const received: unknown[] = []
       provider.registerListener('put', (e) => received.push(JSON.parse(e.data)))
-      provider.fireFakePut(LD_PAYLOAD, {}, vi.fn())
+      provider.dispatchFlagsUpdate(LD_PAYLOAD, {}, vi.fn())
       expect(received).toHaveLength(1)
     })
     it('applies overrides in the synthetic event', () => {
       const received: Array<Record<string, { value: unknown }>> = []
       provider.registerListener('put', (e) => received.push(JSON.parse(e.data)))
-      provider.fireFakePut(LD_PAYLOAD, { 'bool-flag': false }, vi.fn())
+      provider.dispatchFlagsUpdate(LD_PAYLOAD, { 'bool-flag': false }, vi.fn())
       expect(received[0]['bool-flag'].value).toBe(false)
       expect(received[0]['string-flag'].value).toBe('control')
     })
     it('calls notifyFn after firing', () => {
       const notify = vi.fn()
       provider.registerListener('put', () => {})
-      provider.fireFakePut(LD_PAYLOAD, {}, notify)
+      provider.dispatchFlagsUpdate(LD_PAYLOAD, {}, notify)
       expect(notify).toHaveBeenCalledOnce()
     })
   })

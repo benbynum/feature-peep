@@ -36,7 +36,7 @@ export function create() {
       return normalized
     },
 
-    hookSDK(openFeature: unknown, getOverrides: () => Overrides, onFlagsUpdate: (flags: FlagsMap) => void): boolean {
+    instrumentSDK(openFeature: unknown, getOverrides: () => Overrides, onFlagsUpdate: (flags: FlagsMap) => void): boolean {
       if (hooked) return true
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = (openFeature as any)?.getClient?.()
@@ -108,8 +108,8 @@ export function create() {
       }
     },
 
-    fireFakePut(currentFlags: FlagsMap, overrides: Overrides, notifyFn: () => void): void {
-      log('fireFakePut (OF): listeners=%d, flags=%d', snapshotListeners.length, Object.keys(currentFlags).length)
+    dispatchFlagsUpdate(currentFlags: FlagsMap, overrides: Overrides, notifyFn: () => void): void {
+      log('dispatchFlagsUpdate (OF): listeners=%d, flags=%d', snapshotListeners.length, Object.keys(currentFlags).length)
       if (snapshotListeners.length === 0 || Object.keys(currentFlags).length === 0) {
         notifyFn()
         return
@@ -120,7 +120,7 @@ export function create() {
       })
       const fakeEvent = new MessageEvent('flags-snapshot', { data: JSON.stringify(payload) })
       for (const listener of snapshotListeners) {
-        try { listener(fakeEvent) } catch (err) { log('fireFakePut listener error: %o', err) }
+        try { listener(fakeEvent) } catch (err) { log('dispatchFlagsUpdate listener error: %o', err) }
       }
       notifyFn()
     },

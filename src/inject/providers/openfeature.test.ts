@@ -137,7 +137,7 @@ describe('OpenFeature provider', () => {
     })
   })
 
-  describe('fireFakePut', () => {
+  describe('dispatchFlagsUpdate', () => {
     const currentFlags = {
       'bool-flag':   { value: true },
       'string-flag': { value: 'control' },
@@ -145,31 +145,31 @@ describe('OpenFeature provider', () => {
 
     it('calls notifyFn even when no listeners are registered', () => {
       const notify = vi.fn()
-      provider.fireFakePut(currentFlags, {}, notify)
+      provider.dispatchFlagsUpdate(currentFlags, {}, notify)
       expect(notify).toHaveBeenCalledOnce()
     })
     it('fires a flags-snapshot event to each registered listener', () => {
       const received: unknown[] = []
       provider.registerListener('flags-snapshot', (e) => received.push(JSON.parse(e.data)))
-      provider.fireFakePut(currentFlags, {}, vi.fn())
+      provider.dispatchFlagsUpdate(currentFlags, {}, vi.fn())
       expect(received).toHaveLength(1)
     })
     it('applies overrides in the synthetic event', () => {
       const received: Array<Array<{ key: string; value: unknown }>> = []
       provider.registerListener('flags-snapshot', (e) => received.push(JSON.parse(e.data)))
-      provider.fireFakePut(currentFlags, { 'bool-flag': false }, vi.fn())
+      provider.dispatchFlagsUpdate(currentFlags, { 'bool-flag': false }, vi.fn())
       expect(received[0].find(f => f.key === 'bool-flag')!.value).toBe(false)
       expect(received[0].find(f => f.key === 'string-flag')!.value).toBe('control')
     })
     it('calls notifyFn after firing', () => {
       const notify = vi.fn()
       provider.registerListener('flags-snapshot', () => {})
-      provider.fireFakePut(currentFlags, {}, notify)
+      provider.dispatchFlagsUpdate(currentFlags, {}, notify)
       expect(notify).toHaveBeenCalledOnce()
     })
   })
 
-  describe('hookSDK', () => {
+  describe('instrumentSDK', () => {
     function makeClient(flags: Record<string, unknown>) {
       const get = (key: string, def: unknown) => key in flags ? flags[key] : def
       return {
@@ -185,29 +185,29 @@ describe('OpenFeature provider', () => {
     }
 
     it('returns false when getClient is unavailable', () => {
-      expect(provider.hookSDK!({ getClient: () => null }, () => ({}), vi.fn())).toBe(false)
+      expect(provider.instrumentSDK!({ getClient: () => null }, () => ({}), vi.fn())).toBe(false)
     })
     it('returns true on successful hook', () => {
       const sdk = { getClient: () => makeClient({}) }
-      expect(provider.hookSDK!(sdk, () => ({}), vi.fn())).toBe(true)
+      expect(provider.instrumentSDK!(sdk, () => ({}), vi.fn())).toBe(true)
     })
     it('returns override value for overridden key', () => {
       const client = makeClient({ 'my-flag': true })
       const sdk = { getClient: () => client }
-      provider.hookSDK!(sdk, () => ({ 'my-flag': false }), vi.fn())
+      provider.instrumentSDK!(sdk, () => ({ 'my-flag': false }), vi.fn())
       expect(client.getBooleanValue('my-flag', true)).toBe(false)
     })
     it('returns real value for non-overridden key', () => {
       const client = makeClient({ 'my-flag': true })
       const sdk = { getClient: () => client }
-      provider.hookSDK!(sdk, () => ({}), vi.fn())
+      provider.instrumentSDK!(sdk, () => ({}), vi.fn())
       expect(client.getBooleanValue('my-flag', false)).toBe(true)
     })
     it('fires onFlagsUpdate when a flag is evaluated', () => {
       const client = makeClient({ 'my-flag': true })
       const sdk = { getClient: () => client }
       const onUpdate = vi.fn()
-      provider.hookSDK!(sdk, () => ({}), onUpdate)
+      provider.instrumentSDK!(sdk, () => ({}), onUpdate)
       client.getBooleanValue('my-flag', false)
       expect(onUpdate).toHaveBeenCalled()
     })

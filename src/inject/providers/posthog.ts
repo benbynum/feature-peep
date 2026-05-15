@@ -80,7 +80,7 @@ export function create() {
     },
 
     registerListener(_type: string, _listener: (e: MessageEvent) => void): void {},
-    fireFakePut(_flags: FlagsMap, _overrides: Overrides, notifyFn: () => void): void { notifyFn() },
+    dispatchFlagsUpdate(_flags: FlagsMap, _overrides: Overrides, notifyFn: () => void): void { notifyFn() },
     sseEventTypes: new Set<string>(),
     processSSEEvent: (): null => null,
   }

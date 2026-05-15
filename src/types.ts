@@ -21,10 +21,10 @@ export interface Provider {
   applyPollingOverrides(data: unknown, overrides: Overrides): unknown | null
   normalizeFlags(data: unknown): FlagsMap
   registerListener(type: string, listener: (e: MessageEvent) => void): void
-  fireFakePut(currentFlags: FlagsMap, overrides: Overrides, notifyFn: () => void): void
+  dispatchFlagsUpdate(currentFlags: FlagsMap, overrides: Overrides, notifyFn: () => void): void
   sseEventTypes: Set<string>
   processSSEEvent(type: string, raw: unknown, currentFlags: FlagsMap, overrides: Overrides): SSEEventResult | null
-  hookSDK?(sdk: unknown, getOverrides: () => Overrides, onFlagsUpdate: (flags: FlagsMap) => void): boolean
+  instrumentSDK?(sdk: unknown, getOverrides: () => Overrides, onFlagsUpdate: (flags: FlagsMap) => void): boolean
 }
 
 export interface ProviderMeta {

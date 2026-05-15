@@ -90,8 +90,8 @@
           log("EventSource: put listener registered, total=%d", putListeners.length);
         }
       },
-      fireFakePut(currentFlags2, overrides2, notifyFn) {
-        log("fireFakePut: listeners=%d, flags=%d", putListeners.length, Object.keys(currentFlags2).length);
+      dispatchFlagsUpdate(currentFlags2, overrides2, notifyFn) {
+        log("dispatchFlagsUpdate: listeners=%d, flags=%d", putListeners.length, Object.keys(currentFlags2).length);
         if (putListeners.length === 0 || Object.keys(currentFlags2).length === 0) return;
         const modified = applySSEOverrides(currentFlags2, overrides2);
         const fakeEvent = new MessageEvent("put", { data: JSON.stringify(modified) });
@@ -99,7 +99,7 @@
           try {
             listener(fakeEvent);
           } catch (err) {
-            log("fireFakePut listener error: %o", err);
+            log("dispatchFlagsUpdate listener error: %o", err);
           }
         }
         notifyFn();
@@ -165,7 +165,7 @@
         }
         return normalized;
       },
-      hookSDK(openFeature, getOverrides, onFlagsUpdate) {
+      instrumentSDK(openFeature, getOverrides, onFlagsUpdate) {
         if (hooked) return true;
         const client = openFeature?.getClient?.();
         if (!client) {
@@ -225,8 +225,8 @@
           log("OpenFeature: flags-snapshot listener registered, total=%d", snapshotListeners.length);
         }
       },
-      fireFakePut(currentFlags2, overrides2, notifyFn) {
-        log("fireFakePut (OF): listeners=%d, flags=%d", snapshotListeners.length, Object.keys(currentFlags2).length);
+      dispatchFlagsUpdate(currentFlags2, overrides2, notifyFn) {
+        log("dispatchFlagsUpdate (OF): listeners=%d, flags=%d", snapshotListeners.length, Object.keys(currentFlags2).length);
         if (snapshotListeners.length === 0 || Object.keys(currentFlags2).length === 0) {
           notifyFn();
           return;
@@ -240,7 +240,7 @@
           try {
             listener(fakeEvent);
           } catch (err) {
-            log("fireFakePut listener error: %o", err);
+            log("dispatchFlagsUpdate listener error: %o", err);
           }
         }
         notifyFn();
@@ -379,7 +379,7 @@
       },
       registerListener(_type, _listener) {
       },
-      fireFakePut(_flags, _overrides, notifyFn) {
+      dispatchFlagsUpdate(_flags, _overrides, notifyFn) {
         notifyFn();
       },
       sseEventTypes: /* @__PURE__ */ new Set(),
@@ -425,7 +425,7 @@
   function applyOverrideImmediate() {
     log("applyOverrideImmediate: transport=%s, provider=%s", detectedTransport, detectedProvider);
     if (detectedTransport === "sse") {
-      getProvider(detectedProvider)?.fireFakePut(currentFlags, overrides, notify);
+      getProvider(detectedProvider)?.dispatchFlagsUpdate(currentFlags, overrides, notify);
     }
   }
   window.addEventListener("message", (e) => {
@@ -578,7 +578,7 @@
   function tryHookOpenFeature(sdk) {
     const ofProvider = getProvider("openfeature");
     if (!ofProvider) return;
-    const success = ofProvider.hookSDK(sdk, () => overrides, (flags) => {
+    const success = ofProvider.instrumentSDK(sdk, () => overrides, (flags) => {
       currentFlags = flags;
       if (!detectedProvider) setDetected("openfeature", "sse");
       notify();

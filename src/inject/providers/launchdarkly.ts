@@ -63,13 +63,13 @@ export function create() {
       }
     },
 
-    fireFakePut(currentFlags: FlagsMap, overrides: Overrides, notifyFn: () => void): void {
-      log('fireFakePut: listeners=%d, flags=%d', putListeners.length, Object.keys(currentFlags).length)
+    dispatchFlagsUpdate(currentFlags: FlagsMap, overrides: Overrides, notifyFn: () => void): void {
+      log('dispatchFlagsUpdate: listeners=%d, flags=%d', putListeners.length, Object.keys(currentFlags).length)
       if (putListeners.length === 0 || Object.keys(currentFlags).length === 0) return
       const modified = applySSEOverrides(currentFlags, overrides)
       const fakeEvent = new MessageEvent('put', { data: JSON.stringify(modified) })
       for (const listener of putListeners) {
-        try { listener(fakeEvent) } catch (err) { log('fireFakePut listener error: %o', err) }
+        try { listener(fakeEvent) } catch (err) { log('dispatchFlagsUpdate listener error: %o', err) }
       }
       notifyFn()
     },
