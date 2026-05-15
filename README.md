@@ -20,7 +20,7 @@ The extension will appear in your toolbar. Pin it for easy access.
 At my last job we had 100+ flags across 5 environments with 40 engineers and QA testers using them. Toggling a value to smoke test a feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeaturePeep changes that!
 
 - Zero config — works with what's already on the page, no API keys or SDK setup required
-- See every active flag on the current page instantly — production, staging, or local
+- See every active flag on the current page instantly, any environment
 - Override flags locally without touching shared environments or breaking CI
 - No dashboard access needed — useful for engineers, QA, and anyone asking "is that flag on in prod?"
 
