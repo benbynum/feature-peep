@@ -96,40 +96,65 @@
       </div>
 
       <div class="settings-body">
-        <div class="settings-section">
-          <div class="settings-row">
-            <span class="settings-row-label">Theme</span>
-            <div class="theme-segmented">
-              <button id="theme-light-btn" class="theme-seg-btn">Light</button>
-              <button id="theme-dark-btn" class="theme-seg-btn">Dark</button>
+        <div id="settings-main-content">
+          <div class="settings-section">
+            <div class="settings-row">
+              <span class="settings-row-label">Theme</span>
+              <div class="theme-segmented">
+                <button id="theme-light-btn" class="theme-seg-btn">Light</button>
+                <button id="theme-dark-btn" class="theme-seg-btn">Dark</button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="settings-section">
-          <button id="privacy-link-btn" class="settings-link-row">
-            <span>Privacy Policy</span>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-          </button>
-          <div class="settings-link-row settings-link-row--disabled">
-            <span class="settings-label-group">
-              Send Feedback
-              <span class="info-icon" data-tooltip="Submit a bug, request provider support, or share other thoughts here">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </span>
-            </span>
-            <span class="settings-coming-soon">Coming soon</span>
+          <div class="settings-section">
+            <button id="privacy-link-btn" class="settings-link-row">
+              <span>Privacy Policy</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </button>
+            <button id="feedback-btn" class="settings-link-row">
+              <span>Submit feedback</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
           </div>
-        </div>
 
-        <div class="settings-section settings-section--about">
-          <svg class="about-logo" width="22" height="22" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 17 89 L 17 11 A 5 5 0 0 1 22 6 L 85 6 A 5 5 0 0 1 90 11 L 90 22 L 61 29 L 90 36 L 90 47 A 5 5 0 0 1 85 52 L 30 52 L 30 89 A 6.5 6.5 0 0 1 23.5 95.5 A 6.5 6.5 0 0 1 17 89 Z"/></svg>
-          <div class="about-name">FeaturePeep</div>
-          <div class="about-version">v<span id="settings-version"></span></div>
-        </div>
+          <div class="settings-section settings-section--about">
+            <svg class="about-logo" width="22" height="22" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M 17 89 L 17 11 A 5 5 0 0 1 22 6 L 85 6 A 5 5 0 0 1 90 11 L 90 22 L 61 29 L 90 36 L 90 47 A 5 5 0 0 1 85 52 L 30 52 L 30 89 A 6.5 6.5 0 0 1 23.5 95.5 A 6.5 6.5 0 0 1 17 89 Z"/></svg>
+            <div class="about-name">FeaturePeep</div>
+            <div class="about-version">v<span id="settings-version"></span></div>
+          </div>
+        </div><!-- /#settings-main-content -->
+
+        <div id="feedback-view" class="hidden">
+          <div id="feedback-ratelimit" class="feedback-ratelimit hidden">
+            You've already sent feedback recently. Please check back in 24 hours.
+          </div>
+          <div id="feedback-challenge" class="feedback-form-section">
+            <p id="feedback-challenge-label" class="feedback-challenge-label">What is ? + ? =</p>
+            <div class="feedback-challenge-row">
+              <input id="feedback-captcha-input" class="feedback-captcha-input" type="text" inputmode="numeric" maxlength="2" placeholder="?" autocomplete="off" />
+              <button id="feedback-verify-btn" class="feedback-primary-btn">Verify</button>
+            </div>
+            <span id="feedback-challenge-error" class="feedback-error hidden">Incorrect — try again.</span>
+          </div>
+          <div id="feedback-compose" class="feedback-form-section hidden">
+            <textarea id="feedback-textarea" class="feedback-textarea" maxlength="200" rows="5" placeholder="A bug, feature request, or anything else..."></textarea>
+            <div class="feedback-compose-footer">
+              <span id="feedback-char-count" class="feedback-char-count">0 / 200</span>
+              <div class="feedback-action-btns">
+                <button id="feedback-cancel-btn" class="feedback-secondary-btn">Cancel</button>
+                <button id="feedback-submit-btn" class="feedback-primary-btn">Send</button>
+              </div>
+            </div>
+            <span id="feedback-submit-error" class="feedback-error hidden">Something went wrong — please try again.</span>
+          </div>
+          <div id="feedback-success" class="feedback-success hidden">Thanks for the feedback!</div>
+        </div><!-- /#feedback-view -->
       </div>
 
       <div class="settings-footer footer">

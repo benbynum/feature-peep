@@ -12,3 +12,6 @@ export const MSG_GET_FLAGS           = 'GET_FLAGS'           as const
 export const STORAGE_OVERRIDES_PREFIX = 'fc:overrides:' as const
 export const STORAGE_DEMO_DISABLED    = 'fc:onboarding:demoDisabled' as const
 export const STORAGE_THEME            = 'fc:theme' as const
+export const STORAGE_LAST_FEEDBACK    = 'fc:feedback:lastSent' as const
+
+export const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mkoydwwg' as const

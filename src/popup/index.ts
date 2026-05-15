@@ -4,7 +4,7 @@ import { meta as phMeta } from './providers/posthog.js'
 import { DEMO_SITE_URL } from './demoFlags.js'
 import {
   MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
-  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_THEME,
+  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_THEME, STORAGE_LAST_FEEDBACK, FORMSPREE_ENDPOINT,
 } from '../constants.js'
 import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
 
@@ -408,8 +408,16 @@ function closeSettings(): void {
 
 document.getElementById('settings-btn')!.addEventListener('click', openSettings)
 
+function handleSettingsBack(): void {
+  if (!document.getElementById('feedback-view')!.classList.contains('hidden')) {
+    closeFeedbackView()
+  } else {
+    closeSettings()
+  }
+}
+
 for (const id of ['settings-back-btn', 'settings-back-btn-footer']) {
-  document.getElementById(id)!.addEventListener('click', closeSettings)
+  document.getElementById(id)!.addEventListener('click', handleSettingsBack)
 }
 
 document.getElementById('theme-light-btn')!.addEventListener('click', () => setTheme('light'))
@@ -421,6 +429,116 @@ document.getElementById('view-demo-btn')!.addEventListener('click', () => {
 
 document.getElementById('privacy-link-btn')!.addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://featurepeep.com/privacy' })
+})
+
+// ── Feedback ──────────────────────────────────────────────────
+
+const FEEDBACK_COOLDOWN_MS = 24 * 60 * 60 * 1000
+const GITHUB_ISSUES_URL = 'https://github.com/benbynum/feature-peep/issues'
+let feedbackChallenge = { a: 0, b: 0 }
+
+function genChallenge(): void {
+  feedbackChallenge.a = Math.floor(Math.random() * 9) + 1
+  feedbackChallenge.b = Math.floor(Math.random() * 9) + 1
+  document.getElementById('feedback-challenge-label')!.textContent =
+    `What is ${feedbackChallenge.a} + ${feedbackChallenge.b}?`
+  ;(document.getElementById('feedback-captcha-input') as HTMLInputElement).value = ''
+}
+
+function openFeedbackView(): void {
+  document.getElementById('settings-main-content')!.classList.add('hidden')
+  document.getElementById('feedback-view')!.classList.remove('hidden')
+  document.getElementById('feedback-ratelimit')!.classList.add('hidden')
+  document.getElementById('feedback-challenge')!.classList.remove('hidden')
+  document.getElementById('feedback-compose')!.classList.add('hidden')
+  document.getElementById('feedback-success')!.classList.add('hidden')
+  document.getElementById('feedback-challenge-error')!.classList.add('hidden')
+  document.getElementById('feedback-submit-error')!.classList.add('hidden')
+  ;(document.getElementById('feedback-textarea') as HTMLTextAreaElement).value = ''
+  document.getElementById('feedback-char-count')!.textContent = '0 / 200'
+
+  chrome.storage.local.get([STORAGE_LAST_FEEDBACK], (result) => {
+    const last = result[STORAGE_LAST_FEEDBACK] as number | undefined
+    const limited = last != null && Date.now() - last < FEEDBACK_COOLDOWN_MS
+    document.getElementById('feedback-ratelimit')!.classList.toggle('hidden', !limited)
+    document.getElementById('feedback-challenge')!.classList.toggle('hidden', limited)
+    if (!limited) {
+      genChallenge()
+      ;(document.getElementById('feedback-captcha-input') as HTMLInputElement).focus()
+    }
+  })
+}
+
+function closeFeedbackView(): void {
+  document.getElementById('feedback-view')!.classList.add('hidden')
+  document.getElementById('settings-main-content')!.classList.remove('hidden')
+}
+
+document.getElementById('feedback-btn')!.addEventListener('click', openFeedbackView)
+
+function verifyChallenge(): void {
+  const input = document.getElementById('feedback-captcha-input') as HTMLInputElement
+  const val = parseInt(input.value, 10)
+  if (val === feedbackChallenge.a + feedbackChallenge.b) {
+    document.getElementById('feedback-challenge')!.classList.add('hidden')
+    document.getElementById('feedback-compose')!.classList.remove('hidden')
+    ;(document.getElementById('feedback-textarea') as HTMLTextAreaElement).focus()
+  } else {
+    document.getElementById('feedback-challenge-error')!.classList.remove('hidden')
+    genChallenge()
+  }
+}
+
+document.getElementById('feedback-verify-btn')!.addEventListener('click', verifyChallenge)
+document.getElementById('feedback-cancel-btn')!.addEventListener('click', closeFeedbackView)
+
+document.getElementById('feedback-captcha-input')!.addEventListener('keydown', (e) => {
+  if ((e as KeyboardEvent).key === 'Enter') verifyChallenge()
+})
+
+const feedbackTextarea = document.getElementById('feedback-textarea') as HTMLTextAreaElement
+const feedbackCharCount = document.getElementById('feedback-char-count')!
+
+feedbackTextarea.addEventListener('input', () => {
+  const len = feedbackTextarea.value.length
+  feedbackCharCount.textContent = `${len} / 200`
+  feedbackCharCount.classList.toggle('over-limit', len > 180)
+})
+
+document.getElementById('feedback-submit-btn')!.addEventListener('click', async () => {
+  const msg = feedbackTextarea.value.trim()
+  if (!msg) return
+  const btn = document.getElementById('feedback-submit-btn') as HTMLButtonElement
+  btn.disabled = true
+  btn.textContent = 'Sending…'
+  const errEl = document.getElementById('feedback-submit-error')!
+  const errorMessages: Record<number, string> = {
+    402: `Monthly feedback quota from all users has been hit. Try again next month or submit feedback on <a href="${GITHUB_ISSUES_URL}" target="_blank">GitHub</a>.`,
+    422: 'Your message was flagged as spam. If this is an error, please reach out directly.',
+    429: 'Too many requests — please try again in a few minutes.',
+  }
+  try {
+    const res = await fetch(FORMSPREE_ENDPOINT, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, _subject: '[FeaturePeep Feedback]' }),
+    })
+    if (!res.ok) {
+      errEl.innerHTML = errorMessages[res.status] ?? 'Something went wrong — please try again.'
+      errEl.classList.remove('hidden')
+      btn.disabled = false
+      btn.textContent = 'Send'
+      return
+    }
+    chrome.storage.local.set({ [STORAGE_LAST_FEEDBACK]: Date.now() })
+    document.getElementById('feedback-compose')!.classList.add('hidden')
+    document.getElementById('feedback-success')!.classList.remove('hidden')
+  } catch {
+    errEl.innerHTML = 'Something went wrong — please try again.'
+    errEl.classList.remove('hidden')
+    btn.disabled = false
+    btn.textContent = 'Send'
+  }
 })
 
 const pollRefreshBtn = document.getElementById('poll-refresh-btn')!

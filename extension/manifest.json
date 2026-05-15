@@ -37,5 +37,6 @@
       "all_frames": false
     }
   ],
-  "permissions": ["storage", "tabs", "windows"]
+  "permissions": ["storage", "tabs", "windows"],
+  "host_permissions": ["https://formspree.io/*"]
 }
