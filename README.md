@@ -1,4 +1,4 @@
-# FeaturePeep
+# [FeaturePeep](https://featurepeep.com)
 
 Inspect and override feature flags in real-time. Any page, any environment.
 
