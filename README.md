@@ -17,11 +17,11 @@ The extension will appear in your toolbar. Pin it for easy access.
 
 ## Why it exists
 
-At my last company we had 100+ flags across 5 environments. There were 40 engineers. Toggling a value to smoke test a feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeaturePeep changes that!
+At my last job we had 100+ flags across 5 environments with 40 engineers and QA testers using them. Toggling a value to smoke test a feature meant risking someone else's environment, breaking CI, or causing countless other potential side effects. FeaturePeep changes that!
 
 - Auto-detect which provider is implemented
 - See which flags are active on any page instantly
-- Reproduce bugs in all environemnts without worrying about negative downstream effects
+- Reproduce bugs in all environments without worrying about negative downstream effects
 - No more waiting on someone with dashboard access to make a change
 
 ## Supported Providers
@@ -53,14 +53,9 @@ FeaturePeep collects no user data. It does not make network requests of its own,
 
 Full details at [featurepeep.com/privacy](https://featurepeep.com/privacy).
 
-## Scope
-
-- Does not modify server-side feature flags
-- Does not access provider admin APIs
-- Overrides are local to your browser session
-- Intended for frontend debugging and QA workflows
-
 ## Limitations
 
 - Chrome only
+- Overrides are local to your browser — does not modify server-side flags or access provider admin APIs
 - PostHog self-hosted instances require manual URL configuration (coming soon)
+- Intended for frontend debugging and QA workflows
