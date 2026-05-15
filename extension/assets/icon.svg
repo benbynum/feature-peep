@@ -3,7 +3,7 @@
     Single closed path: rounded flag body + V-notch + pole with semicircle cap.
     Color controlled via currentColor — set with CSS `color` property or fill attribute.
   -->
-  <path fill="currentColor" d="
+  <path fill="#7C3AED" d="
     M 17 89
     L 17 11
     A 5 5 0 0 1 22 6
