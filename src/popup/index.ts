@@ -126,7 +126,8 @@ function render(): void {
 
   const provider = state.provider || 'launchdarkly'
   const providerMeta = PROVIDERS[provider]
-  badgeEl.classList.toggle('badge--light', !!providerMeta?.lightBadge)
+  badgeEl.classList.remove('badge--light')
+  badgeEl.style.background = providerMeta?.badgeBg ?? 'var(--badge-bg)'
   badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
   const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
   badgeEl.title = transportLabel

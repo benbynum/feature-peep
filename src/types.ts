@@ -34,6 +34,6 @@ export interface ProviderMeta {
   svgPath?: string
   svgTransform?: string
   viewBox?: string
-  lightBadge: boolean
+  badgeBg: string
   logoOnly: boolean
 }

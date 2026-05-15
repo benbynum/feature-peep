@@ -4,6 +4,6 @@ export const meta: ProviderMeta = {
   id: 'openfeature',
   name: 'OpenFeature',
   imageSrc: 'assets/openfeature.png',
-  lightBadge: true,
+  badgeBg: '#0C7EF8',
   logoOnly: true,
 }
