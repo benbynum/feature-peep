@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Meridian — Team Analytics</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230D9488'/%3E%3Ctext x='16' y='23' font-family='Inter,Arial,sans-serif' font-size='18' font-weight='800' fill='white' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -59,7 +60,7 @@
     /* ── NAV ────────────────────────────────────────────────────────── */
     nav {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 48px; height: 56px;
+      padding: 0 48px; height: 64px;
       border-bottom: 1px solid var(--border);
       position: sticky; top: 0;
       background: rgba(15,23,42,.9);
@@ -82,14 +83,14 @@
     .btn-ghost:hover { border-color: var(--text-subtle); color: var(--text); }
 
     /* ── HERO ───────────────────────────────────────────────────────── */
-    .hero { max-width: 900px; margin: 0 auto; padding: 28px 48px 20px; text-align: center; }
+    .hero { max-width: 900px; margin: 0 auto; padding: 80px 48px 72px; text-align: center; }
     .hero-badge {
       display: inline-flex; align-items: center; gap: 6px;
       font-size: 12.5px; font-weight: 600; color: var(--teal-light);
       background: rgba(13,148,136,.12); border: 1px solid rgba(13,148,136,.3);
       padding: 5px 13px; border-radius: 20px; margin-bottom: 10px; letter-spacing: .3px;
     }
-    .hero h1 { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 10px; }
+    .hero h1 { font-size: 56px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 10px; }
     .hero h1 em { font-style: normal; color: var(--teal-light); }
     .hero p { font-size: 16px; color: var(--text-muted); line-height: 1.6; max-width: 520px; margin: 0 auto 18px; }
     .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -175,9 +176,35 @@
     .plan-features li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-muted); }
     .check { color: var(--teal-light); font-weight: 700; font-size: 15px; }
 
+    /* ── PRICING GRID ───────────────────────────────────────────────── */
+    .pricing-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; }
+    .pricing-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 32px; position: relative; overflow: hidden;
+    }
+    .pricing-card::before { content:''; position: absolute; top:0; left:0; right:0; height:3px; background: var(--border); }
+    .pricing-card--pro { border-color: rgba(13,148,136,.45); }
+    .pricing-card--pro::before { background: linear-gradient(90deg, var(--teal), var(--teal-light)); }
+    .pricing-card--max::before { background: linear-gradient(90deg, #7C3AED, #9F67FF); }
+
     /* ── FOOTER ─────────────────────────────────────────────────────── */
     footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; font-size: 13px; color: var(--text-subtle); }
     footer a:hover { color: var(--text-muted); }
+
+    /* ── SESSION TIMEOUT MODAL ──────────────────────────────────────── */
+    #session-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index: 9000; align-items: center; justify-content: center; }
+    #session-modal.visible { display: flex; }
+    .session-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 36px 40px; max-width: 400px; width: 100%; margin: 0 16px; text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.5); }
+    .session-icon { font-size: 36px; margin-bottom: 16px; }
+    .session-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .session-body { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 28px; }
+    .session-body strong { color: var(--text); font-weight: 600; }
+    .session-actions { display: flex; gap: 12px; }
+    .session-actions .btn-primary-lg { flex: 1; }
+    .session-actions .btn-ghost { flex: 1; }
+    #session-signed-out { display: none; }
+    #session-signed-out.visible { display: block; }
+    #session-warning-body.hidden { display: none; }
 
     /* ── EXPORT BUTTON (boolean flag: show-export-button) ──────────── */
     #export-btn { display: none; align-items: center; gap: 6px; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: var(--r-sm); border: 1px solid var(--border); transition: border-color .15s, color .15s; }
@@ -359,22 +386,59 @@
   <!-- ── PRICING ─────────────────────────────────────────────────── -->
   <section class="pricing" id="pricing">
     <div class="eyebrow">Pricing</div>
-    <div class="section-title">Simple, transparent pricing</div>
-    <div class="section-sub" style="margin-bottom:36px">One plan. Everything included. No seat limits.</div>
-    <div class="pricing-card">
-      <div id="pricing-badge"></div>
-      <div class="plan-name">Pro</div>
-      <div class="plan-price">$49<span>/mo</span></div>
-      <div class="plan-trial">Free for <span id="trial-days-pricing">14</span> days — no credit card required.</div>
-      <ul class="plan-features">
-        <li><span class="check">✓</span> Unlimited dashboards</li>
-        <li><span class="check">✓</span> Real-time event streaming</li>
-        <li><span class="check">✓</span> AI Insights (beta)</li>
-        <li><span class="check">✓</span> Up to 10 data sources</li>
-        <li><span class="check">✓</span> <span id="retention-feature">90</span> days data retention</li>
-        <li><span class="check">✓</span> Priority support</li>
-      </ul>
-      <button class="btn btn-primary-lg" id="pricing-cta" style="width:100%">Start free trial</button>
+    <div class="section-title">Plans for every team</div>
+    <div class="section-sub" style="margin-bottom:36px">Start free. Upgrade when you're ready. No hidden fees.</div>
+    <div class="pricing-grid">
+
+      <!-- Free -->
+      <div class="pricing-card pricing-card--free">
+        <div class="plan-name" style="color:var(--text-muted)">Free</div>
+        <div class="plan-price">$0<span>/mo</span></div>
+        <div class="plan-trial" style="margin-bottom:28px">No credit card required.</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 3 dashboards</li>
+          <li><span class="check">✓</span> 1 data source</li>
+          <li><span class="check">✓</span> 7-day data retention</li>
+          <li><span class="check">✓</span> Community support</li>
+          <li style="opacity:.35"><span class="check">✓</span> AI Insights</li>
+          <li style="opacity:.35"><span class="check">✓</span> Automated reports</li>
+        </ul>
+        <button class="btn btn-ghost" style="width:100%">Get started free</button>
+      </div>
+
+      <!-- Pro (flag-driven) -->
+      <div class="pricing-card pricing-card--pro">
+        <div id="pricing-badge"></div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$49<span>/mo</span></div>
+        <div class="plan-trial">Free for <span id="trial-days-pricing">14</span> days — no credit card required.</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> Unlimited dashboards</li>
+          <li><span class="check">✓</span> Up to 10 data sources</li>
+          <li><span class="check">✓</span> <span id="retention-feature">90</span>-day data retention</li>
+          <li><span class="check">✓</span> Real-time event streaming</li>
+          <li><span class="check">✓</span> AI Insights (beta)</li>
+          <li><span class="check">✓</span> Priority support</li>
+        </ul>
+        <button class="btn btn-primary-lg" id="pricing-cta" style="width:100%">Start free trial</button>
+      </div>
+
+      <!-- Max -->
+      <div class="pricing-card pricing-card--max">
+        <div class="plan-name" style="color:#A78BFA">Max</div>
+        <div class="plan-price">$199<span>/mo</span></div>
+        <div class="plan-trial" style="margin-bottom:28px">Includes everything in Pro.</div>
+        <ul class="plan-features">
+          <li><span class="check" style="color:#A78BFA">✓</span> Unlimited data sources</li>
+          <li><span class="check" style="color:#A78BFA">✓</span> 365-day data retention</li>
+          <li><span class="check" style="color:#A78BFA">✓</span> SSO &amp; SCIM provisioning</li>
+          <li><span class="check" style="color:#A78BFA">✓</span> Custom SLA &amp; uptime</li>
+          <li><span class="check" style="color:#A78BFA">✓</span> Dedicated support engineer</li>
+          <li><span class="check" style="color:#A78BFA">✓</span> Audit log &amp; data export</li>
+        </ul>
+        <button class="btn btn-ghost" style="width:100%;border-color:#7C3AED;color:#A78BFA">Contact sales</button>
+      </div>
+
     </div>
   </section>
 
@@ -383,6 +447,29 @@
     <div>© 2025 Meridian Inc. &mdash; <em style="opacity:.5;font-style:normal">FeaturePeep demo app</em></div>
     <div style="display:flex;gap:24px"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Status</a></div>
   </footer>
+
+  <!-- ── SESSION TIMEOUT MODAL (number flag: session-timeout-ms) ──── -->
+  <div id="session-modal">
+    <div class="session-card">
+      <div id="session-warning-body">
+        <div class="session-icon">⏱</div>
+        <div class="session-title">Your session is about to expire</div>
+        <div class="session-body">
+          For your security, you'll be signed out in <strong><span id="session-countdown">30</span> seconds</strong> due to inactivity.
+        </div>
+        <div class="session-actions">
+          <button class="btn btn-primary-lg" id="session-stay">Stay signed in</button>
+          <button class="btn btn-ghost" id="session-signout">Sign out</button>
+        </div>
+      </div>
+      <div id="session-signed-out">
+        <div class="session-icon">🔒</div>
+        <div class="session-title">You've been signed out</div>
+        <div class="session-body">Your session expired. Sign back in to continue.</div>
+        <button class="btn btn-primary-lg" style="width:100%" onclick="location.reload()">Sign back in</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── LIVE CHAT BUBBLE (boolean flag: show-live-chat) ──────────── -->
   <div id="live-chat">
@@ -426,15 +513,56 @@
       anonymous: true,
     });
 
+    // ── Session timeout ────────────────────────────────────────────
+    let sessionTimer     = null;
+    let countdownInterval = null;
+
+    function startSessionTimer(ms) {
+      clearTimeout(sessionTimer);
+      sessionTimer = setTimeout(showSessionWarning, ms);
+    }
+
+    function showSessionWarning() {
+      const modal = document.getElementById('session-modal');
+      modal.classList.add('visible');
+      let secs = 30;
+      document.getElementById('session-countdown').textContent = secs;
+      countdownInterval = setInterval(() => {
+        secs--;
+        document.getElementById('session-countdown').textContent = secs;
+        if (secs <= 0) {
+          clearInterval(countdownInterval);
+          document.getElementById('session-signed-out').classList.add('visible');
+          document.getElementById('session-warning-body').classList.add('hidden');
+        }
+      }, 1000);
+    }
+
+    document.getElementById('session-stay').addEventListener('click', () => {
+      clearInterval(countdownInterval);
+      document.getElementById('session-modal').classList.remove('visible');
+      document.getElementById('session-signed-out').classList.remove('visible');
+      document.getElementById('session-warning-body').classList.remove('hidden');
+      startSessionTimer(client.variation('session-timeout-ms', 1800000));
+    });
+
+    document.getElementById('session-signout').addEventListener('click', () => {
+      clearInterval(countdownInterval);
+      document.getElementById('session-signed-out').classList.add('visible');
+      document.getElementById('session-warning-body').classList.add('hidden');
+    });
+
+    // ── Flag application ───────────────────────────────────────────
     function applyFlags() {
-      const showAI       = client.variation('show-ai-insights',   false);
-      const ctaText      = client.variation('cta-text',            'Start free trial');
-      const trialDays    = client.variation('free-trial-days',     14);
-      const banner       = client.variation('promo-banner',        { visible: false });
-      const showChat     = client.variation('show-live-chat',      false);
-      const pricingBadge = client.variation('pricing-badge',       '');
-      const retentionDays= client.variation('data-retention-days', 90);
-      const testimonial  = client.variation('testimonial',         { visible: false });
+      const showAI          = client.variation('show-ai-insights',   false);
+      const ctaText         = client.variation('cta-text',            'Start free trial');
+      const trialDays       = client.variation('free-trial-days',     14);
+      const banner          = client.variation('promo-banner',        { visible: false });
+      const showChat        = client.variation('show-live-chat',      false);
+      const pricingBadge    = client.variation('pricing-badge',       '');
+      const retentionDays   = client.variation('data-retention-days', 90);
+      const testimonial     = client.variation('testimonial',         { visible: false });
+      const sessionTimeoutMs = client.variation('session-timeout-ms', 1800000);
 
       // boolean: show-ai-insights
       document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
@@ -492,6 +620,8 @@
         tEl.classList.remove('visible');
       }
 
+      // number: session-timeout-ms — restart timer on every flag change
+      startSessionTimer(sessionTimeoutMs);
     }
 
     client.on('ready',  applyFlags);
