@@ -191,6 +191,31 @@
     footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; font-size: 13px; color: var(--text-subtle); }
     footer a:hover { color: var(--text-muted); }
 
+    /* ── PREMIUM GATING (boolean flag: premium-features-enabled) ───── */
+    .premium-gate { position: relative; }
+    .premium-gate.locked { pointer-events: none; }
+    .premium-gate.locked > *:not(.lock-overlay) { opacity: .35; filter: blur(1px); }
+    .lock-overlay {
+      display: none; position: absolute; inset: 0; z-index: 10;
+      align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+      background: rgba(15,23,42,.55); backdrop-filter: blur(2px);
+      border-radius: inherit;
+    }
+    .premium-gate.locked .lock-overlay { display: flex; }
+    .lock-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #1E293B; border: 1px solid #334155;
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 12px; font-weight: 700; color: #94A3B8;
+    }
+    .lock-badge-pro {
+      font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+      background: var(--teal); color: #fff; border-radius: 4px; padding: 1px 6px;
+    }
+    /* Export button locked state */
+    #export-btn.locked { opacity: .4; cursor: not-allowed; pointer-events: none; }
+    #export-btn.locked::before { content: '🔒 '; }
+
     /* ── MAINTENANCE MODE (boolean flag: maintenance-mode) ─────────── */
     #maintenance-overlay {
       display: none; position: fixed; inset: 0; z-index: 9999;
@@ -377,7 +402,8 @@
                 <div class="stat-card"><div class="stat-label">Avg. Session</div><div class="stat-value">4m 12s</div><div class="stat-delta">↑ 8.1%</div></div>
                 <div class="stat-card"><div class="stat-label">Revenue (MRR)</div><div class="stat-value">$128k</div><div class="stat-delta">↑ 5.2%</div></div>
               </div>
-              <div class="chart-card">
+              <div class="chart-card premium-gate">
+                <div class="lock-overlay"><div class="lock-badge">🔒 &nbsp;<span class="lock-badge-pro">Pro</span>&nbsp; Advanced analytics</div></div>
                 <div class="chart-head">
                   <div>
                     <div class="chart-title">Weekly Active Users</div>
@@ -407,7 +433,8 @@
             </div>
 
             <!-- AI Insights panel — boolean flag: show-ai-insights -->
-            <div id="ai-panel">
+            <div id="ai-panel" class="premium-gate">
+              <div class="lock-overlay" style="border-radius:var(--r)"><div class="lock-badge">🔒 &nbsp;<span class="lock-badge-pro">Pro</span>&nbsp; AI Insights</div></div>
               <div class="ai-header">
                 <div class="ai-pulse"></div>
                 <div class="ai-title">AI Insights</div>
@@ -708,13 +735,20 @@
       const pricingBadge    = client.variation('pricing-badge',       '');
       const retentionDays   = client.variation('data-retention-days', 90);
       const testimonial     = client.variation('testimonial',         { visible: false });
-      const sessionTimeoutMs  = client.variation('session-timeout-ms', 1800000);
-      const maintenanceMode   = client.variation('maintenance-mode',    false);
+      const sessionTimeoutMs      = client.variation('session-timeout-ms',       1800000);
+      const maintenanceMode       = client.variation('maintenance-mode',          false);
+      const premiumFeaturesEnabled = client.variation('premium-features-enabled', true);
       /* use-v2-flow read here so FeaturePeep surfaces it; openSignup() reads it at click time */
       client.variation('use-v2-flow', false);
 
       // boolean: maintenance-mode
       document.getElementById('maintenance-overlay').classList.toggle('visible', !!maintenanceMode);
+
+      // boolean: premium-features-enabled
+      document.querySelectorAll('.premium-gate').forEach(el => {
+        el.classList.toggle('locked', !premiumFeaturesEnabled);
+      });
+      document.getElementById('export-btn').classList.toggle('locked', !premiumFeaturesEnabled);
 
       // boolean: show-ai-insights
       document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
