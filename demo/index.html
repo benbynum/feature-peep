@@ -206,6 +206,55 @@
     #session-signed-out.visible { display: block; }
     #session-warning-body.hidden { display: none; }
 
+    /* ── SIGNUP MODALS (boolean flag: use-v2-flow) ──────────────────── */
+    .signup-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index: 8000; align-items: center; justify-content: center; }
+    .signup-overlay.visible { display: flex; }
+    .signup-close { position: absolute; top: 16px; right: 18px; background: none; border: none; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .signup-close:hover { color: var(--text); background: rgba(255,255,255,.06); }
+
+    /* V1 — Classic multi-field form */
+    #signup-v1 .signup-card {
+      background: #1A202C; border: 1px solid #2D3748;
+      border-radius: var(--r-lg); padding: 36px; max-width: 420px; width: 100%; margin: 0 16px;
+      position: relative; box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+    #signup-v1 .signup-logo { width: 36px; height: 36px; border-radius: 8px; background: #2D3748; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #A0AEC0; margin-bottom: 20px; }
+    #signup-v1 h2 { font-size: 20px; font-weight: 700; color: #E2E8F0; margin-bottom: 4px; }
+    #signup-v1 .signup-sub { font-size: 13.5px; color: #718096; margin-bottom: 24px; }
+    #signup-v1 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    #signup-v1 label { font-size: 12.5px; font-weight: 600; color: #A0AEC0; }
+    #signup-v1 input { background: #2D3748; border: 1px solid #4A5568; border-radius: 6px; padding: 9px 12px; color: #E2E8F0; font-size: 14px; font-family: inherit; outline: none; }
+    #signup-v1 input:focus { border-color: #718096; }
+    #signup-v1 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #signup-v1 .btn-v1-submit { width: 100%; margin-top: 8px; padding: 10px; background: #4A5568; color: #E2E8F0; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; }
+    #signup-v1 .btn-v1-submit:hover { background: #718096; }
+    #signup-v1 .signup-footer { text-align: center; font-size: 12px; color: #718096; margin-top: 16px; }
+    #signup-v1 .v1-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; background: #2D3748; color: #718096; border: 1px solid #4A5568; border-radius: 4px; padding: 2px 7px; margin-bottom: 14px; }
+
+    /* V2 — Redesigned minimal flow */
+    #signup-v2 .signup-card {
+      background: var(--surface); border: 1px solid rgba(13,148,136,.3);
+      border-radius: var(--r-lg); padding: 40px; max-width: 420px; width: 100%; margin: 0 16px;
+      position: relative; box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    #signup-v2 .signup-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background: linear-gradient(90deg,var(--teal),var(--teal-light)); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    #signup-v2 .signup-logo { width: 36px; height: 36px; border-radius: 8px; background: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 20px; }
+    #signup-v2 h2 { font-size: 22px; font-weight: 800; letter-spacing: -.4px; margin-bottom: 4px; }
+    #signup-v2 .signup-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; }
+    #signup-v2 .v2-trial-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--teal-light); background: rgba(13,148,136,.1); border: 1px solid rgba(13,148,136,.25); padding: 4px 12px; border-radius: 20px; margin-bottom: 24px; }
+    #signup-v2 .v2-google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px 16px; background: #fff; border: none; border-radius: var(--r-sm); font-size: 14px; font-weight: 600; color: #1a1a1a; font-family: inherit; cursor: pointer; margin-bottom: 16px; }
+    #signup-v2 .v2-google-btn:hover { background: #f5f5f5; }
+    #signup-v2 .v2-divider { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-subtle); margin-bottom: 16px; }
+    #signup-v2 .v2-divider::before, #signup-v2 .v2-divider::after { content:''; flex:1; height:1px; background: var(--border); }
+    #signup-v2 .v2-email-row { display: flex; gap: 8px; }
+    #signup-v2 input { flex:1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 14px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; }
+    #signup-v2 input:focus { border-color: var(--teal); }
+    #signup-v2 input::placeholder { color: var(--text-subtle); }
+    #signup-v2 .btn-v2-submit { padding: 10px 18px; background: var(--teal); color: #fff; border: none; border-radius: var(--r-sm); font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; white-space: nowrap; }
+    #signup-v2 .btn-v2-submit:hover { background: var(--teal-light); }
+    #signup-v2 .signup-footer { text-align: center; font-size: 12px; color: var(--text-subtle); margin-top: 16px; }
+    #signup-v2 .v2-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; background: rgba(13,148,136,.12); color: var(--teal-light); border: 1px solid rgba(13,148,136,.25); border-radius: 4px; padding: 2px 7px; margin-bottom: 14px; }
+
     /* ── EXPORT BUTTON (boolean flag: show-export-button) ──────────── */
     #export-btn { display: none; align-items: center; gap: 6px; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: var(--r-sm); border: 1px solid var(--border); transition: border-color .15s, color .15s; }
     #export-btn:hover { border-color: var(--teal-dark); color: var(--text); }
@@ -448,6 +497,48 @@
     <div style="display:flex;gap:24px"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Status</a></div>
   </footer>
 
+  <!-- ── SIGNUP V1 — Classic (use-v2-flow: false) ─────────────────── -->
+  <div class="signup-overlay" id="signup-v1">
+    <div class="signup-card">
+      <button class="signup-close" onclick="closeSignup()">✕</button>
+      <div class="signup-logo">M</div>
+      <div class="v1-badge">Current flow · v1</div>
+      <h2>Create your account</h2>
+      <p class="signup-sub">Fill in the details below to get started.</p>
+      <div class="field-row">
+        <div class="field"><label>First name</label><input type="text" placeholder="Jane" /></div>
+        <div class="field"><label>Last name</label><input type="text" placeholder="Smith" /></div>
+      </div>
+      <div class="field"><label>Work email</label><input type="email" placeholder="jane@company.com" /></div>
+      <div class="field"><label>Password</label><input type="password" placeholder="Min. 8 characters" /></div>
+      <div class="field"><label>Confirm password</label><input type="password" placeholder="Repeat password" /></div>
+      <button class="btn-v1-submit">Create account</button>
+      <p class="signup-footer">Already have an account? <a href="#" style="color:#A0AEC0">Sign in</a></p>
+    </div>
+  </div>
+
+  <!-- ── SIGNUP V2 — Redesign (use-v2-flow: true) ──────────────────── -->
+  <div class="signup-overlay" id="signup-v2">
+    <div class="signup-card">
+      <button class="signup-close" onclick="closeSignup()">✕</button>
+      <div class="signup-logo">M</div>
+      <div class="v2-badge">New flow · v2</div>
+      <h2>Start your free trial</h2>
+      <p class="signup-sub">Try Meridian free for <strong id="signup-trial-days">14</strong> days. No credit card needed.</p>
+      <div class="v2-trial-pill">✦ <span id="signup-trial-days-2">14</span>-day free trial included</div>
+      <button class="v2-google-btn">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
+      <div class="v2-divider">or</div>
+      <div class="v2-email-row">
+        <input type="email" placeholder="Work email address" />
+        <button class="btn-v2-submit">Continue →</button>
+      </div>
+      <p class="signup-footer">Already have an account? <a href="#" style="color:var(--teal-light)">Sign in</a></p>
+    </div>
+  </div>
+
   <!-- ── SESSION TIMEOUT MODAL (number flag: session-timeout-ms) ──── -->
   <div id="session-modal">
     <div class="session-card">
@@ -513,6 +604,17 @@
       anonymous: true,
     });
 
+    // ── Signup modal ───────────────────────────────────────────────
+    function openSignup() {
+      const useV2 = client.variation('use-v2-flow', false);
+      document.getElementById(useV2 ? 'signup-v2' : 'signup-v1').classList.add('visible');
+    }
+    function closeSignup() {
+      document.getElementById('signup-v1').classList.remove('visible');
+      document.getElementById('signup-v2').classList.remove('visible');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSignup(); });
+
     // ── Session timeout ────────────────────────────────────────────
     let sessionTimer     = null;
     let countdownInterval = null;
@@ -563,6 +665,8 @@
       const retentionDays   = client.variation('data-retention-days', 90);
       const testimonial     = client.variation('testimonial',         { visible: false });
       const sessionTimeoutMs = client.variation('session-timeout-ms', 1800000);
+      /* use-v2-flow read here so FeaturePeep surfaces it; openSignup() reads it at click time */
+      client.variation('use-v2-flow', false);
 
       // boolean: show-ai-insights
       document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
@@ -570,11 +674,11 @@
       // string: cta-text
       ['nav-cta', 'hero-cta', 'pricing-cta'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.textContent = ctaText;
+        if (el) { el.textContent = ctaText; el.onclick = openSignup; }
       });
 
       // number: free-trial-days
-      ['trial-days-hero', 'trial-days-pricing'].forEach(id => {
+      ['trial-days-hero', 'trial-days-pricing', 'signup-trial-days', 'signup-trial-days-2'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = trialDays;
       });
