@@ -22,3 +22,7 @@ notes.md
 todo.md
 privacy-brief.md
 *.zip
+
+# Secrets and local config
+.env
+.claude/

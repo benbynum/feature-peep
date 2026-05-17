@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meridian — Team Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0F172A;
+      --surface:      #1E293B;
+      --surface-2:    #253347;
+      --border:       #334155;
+      --teal:         #0D9488;
+      --teal-light:   #14B8A6;
+      --teal-dark:    #0F766E;
+      --text:         #F8FAFC;
+      --text-muted:   #94A3B8;
+      --text-subtle:  #64748B;
+      --r:            12px;
+      --r-sm:         8px;
+      --r-lg:         16px;
+    }
+
+    html { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); scroll-behavior: smooth; }
+    body { min-height: 100vh; }
+    a    { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ── PROMO BANNER (JSON flag: promo-banner) ─────────────────────── */
+    #promo-banner {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 10px 24px;
+      font-size: 13.5px;
+      font-weight: 500;
+      border-bottom: 1px solid transparent;
+      text-align: center;
+      flex-wrap: wrap;
+    }
+    #promo-banner.visible          { display: flex; }
+    #promo-banner.theme-teal  { background: rgba(13,148,136,.12); color:#5EEAD4; border-bottom-color: rgba(13,148,136,.25); }
+    #promo-banner.theme-amber { background: rgba(245,158,11,.10); color:#FCD34D; border-bottom-color: rgba(245,158,11,.25); }
+    #promo-banner.theme-rose  { background: rgba(244,63,94,.10);  color:#FDA4AF; border-bottom-color: rgba(244,63,94,.25);  }
+    #banner-cta {
+      font-size: 12px; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px;
+      border: 1px solid currentColor; opacity: .8;
+      transition: opacity .15s; white-space: nowrap;
+    }
+    #banner-cta:hover { opacity: 1; }
+
+    /* ── NAV ────────────────────────────────────────────────────────── */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 56px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0;
+      background: rgba(15,23,42,.9);
+      backdrop-filter: blur(12px); z-index: 100;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; letter-spacing: -.3px; }
+    .nav-logo-mark {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: var(--teal); display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 800; color: #fff;
+    }
+    .nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; font-weight: 500; color: var(--text-muted); }
+    .nav-links a:hover { color: var(--text); }
+    .btn { border: none; border-radius: var(--r-sm); font-weight: 600; transition: background .15s, color .15s, border-color .15s; }
+    .btn-primary { background: var(--teal); color: #fff; padding: 9px 18px; font-size: 14px; }
+    .btn-primary:hover { background: var(--teal-light); }
+    .btn-primary-lg { background: var(--teal); color: #fff; padding: 11px 26px; font-size: 15px; border-radius: var(--r); }
+    .btn-primary-lg:hover { background: var(--teal-light); }
+    .btn-ghost { background: transparent; color: var(--text-muted); padding: 11px 20px; font-size: 14.5px; font-weight: 500; border-radius: var(--r); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--text-subtle); color: var(--text); }
+
+    /* ── HERO ───────────────────────────────────────────────────────── */
+    .hero { max-width: 900px; margin: 0 auto; padding: 28px 48px 20px; text-align: center; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12.5px; font-weight: 600; color: var(--teal-light);
+      background: rgba(13,148,136,.12); border: 1px solid rgba(13,148,136,.3);
+      padding: 5px 13px; border-radius: 20px; margin-bottom: 10px; letter-spacing: .3px;
+    }
+    .hero h1 { font-size: 42px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 10px; }
+    .hero h1 em { font-style: normal; color: var(--teal-light); }
+    .hero p { font-size: 16px; color: var(--text-muted); line-height: 1.6; max-width: 520px; margin: 0 auto 18px; }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+    .trial-note { font-size: 12px; color: var(--text-subtle); }
+    #trial-days-hero { font-weight: 600; color: var(--text-muted); }
+
+    /* ── DASHBOARD PREVIEW ──────────────────────────────────────────── */
+    .preview-section { padding: 0 48px 80px; max-width: 1200px; margin: 0 auto; }
+    .preview-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+    .preview-chrome { display: flex; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-r { background: #EF4444; } .dot-y { background: #F59E0B; } .dot-g { background: #22C55E; }
+    .chrome-bar { margin-left: 12px; flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; font-size: 12px; color: var(--text-subtle); max-width: 320px; }
+    .preview-body { display: flex; }
+
+    /* Sidebar */
+    .sidebar { width: 196px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 20px 0; }
+    .sidebar-group-label { font-size: 10.5px; font-weight: 600; color: var(--text-subtle); letter-spacing: .8px; text-transform: uppercase; padding: 0 16px 8px; }
+    .sidebar-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; font-size: 13px; font-weight: 500; color: var(--text-muted); }
+    .sidebar-item.active { color: var(--text); background: rgba(13,148,136,.1); border-right: 2px solid var(--teal); }
+
+    /* Main content */
+    .dash-main { flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+    .dash-row  { display: flex; gap: 18px; align-items: flex-start; }
+    .dash-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; }
+    .stat-label { font-size: 11.5px; font-weight: 500; color: var(--text-subtle); margin-bottom: 6px; }
+    .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+    .stat-delta { font-size: 11.5px; font-weight: 500; color: #34D399; margin-top: 3px; }
+
+    .chart-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; }
+    .chart-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+    .chart-title { font-size: 14px; font-weight: 600; }
+    .chart-sub   { font-size: 12px; color: var(--text-subtle); margin-top: 2px; }
+    .chart-tag   { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; background: rgba(13,148,136,.15); color: var(--teal-light); }
+    .bars { display: flex; align-items: flex-end; gap: 8px; height: 80px; }
+    .bar { flex: 1; border-radius: 4px 4px 0 0; background: rgba(13,148,136,.22); transition: background .2s; }
+    .bar:hover { background: rgba(13,148,136,.4); }
+    .bar.hi     { background: var(--teal); }
+    .bar-labels { display: flex; gap: 8px; margin-top: 8px; }
+    .bar-label  { flex: 1; text-align: center; font-size: 10px; color: var(--text-subtle); }
+
+    /* AI Insights panel — boolean flag: show-ai-insights */
+    #ai-panel { width: 220px; flex-shrink: 0; border: 1px solid rgba(13,148,136,.35); border-radius: var(--r); overflow: hidden; display: none; }
+    #ai-panel.visible { display: block; }
+    .ai-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: rgba(13,148,136,.08); }
+    .ai-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--teal-light); box-shadow: 0 0 6px var(--teal-light); }
+    .ai-title { font-size: 12px; font-weight: 600; color: var(--teal-light); }
+    .ai-body  { padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+    .ai-card  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 12px; }
+    .ai-card-label { font-size: 10.5px; font-weight: 600; color: var(--text-subtle); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .ai-card-text  { font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+    .ai-card-value { font-size: 18px; font-weight: 700; color: var(--teal-light); margin-top: 4px; }
+
+    /* ── FEATURES ───────────────────────────────────────────────────── */
+    .features { max-width: 1200px; margin: 0 auto; padding: 72px 48px; border-top: 1px solid var(--border); }
+    .eyebrow { font-size: 12.5px; font-weight: 600; color: var(--teal-light); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    .section-title { font-size: 34px; font-weight: 800; letter-spacing: -.8px; margin-bottom: 12px; }
+    .section-sub   { font-size: 16px; color: var(--text-muted); line-height: 1.65; max-width: 480px; margin-bottom: 44px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; }
+    .feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 26px; transition: border-color .15s; }
+    .feature-card:hover { border-color: var(--teal-dark); }
+    .feature-icon { width: 40px; height: 40px; border-radius: var(--r-sm); background: rgba(13,148,136,.12); display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 16px; }
+    .feature-name { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .feature-desc { font-size: 13.5px; color: var(--text-muted); line-height: 1.6; }
+
+    /* ── PRICING ────────────────────────────────────────────────────── */
+    .pricing { max-width: 1200px; margin: 0 auto; padding: 72px 48px; border-top: 1px solid var(--border); }
+    .pricing-card {
+      max-width: 400px; background: var(--surface);
+      border: 1px solid rgba(13,148,136,.4); border-radius: var(--r-lg);
+      padding: 36px; position: relative; overflow: hidden;
+    }
+    .pricing-card::before { content:''; position: absolute; top:0; left:0; right:0; height:3px; background: linear-gradient(90deg, var(--teal), var(--teal-light)); }
+    .plan-name { font-size: 12.5px; font-weight: 600; color: var(--teal-light); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+    .plan-price { font-size: 50px; font-weight: 800; letter-spacing: -2.5px; margin-bottom: 4px; }
+    .plan-price span { font-size: 18px; font-weight: 400; color: var(--text-muted); letter-spacing: 0; }
+    .plan-trial { font-size: 14px; color: var(--text-subtle); margin-bottom: 28px; }
+    #trial-days-pricing { color: var(--teal-light); font-weight: 600; }
+    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; }
+    .plan-features li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-muted); }
+    .check { color: var(--teal-light); font-weight: 700; font-size: 15px; }
+
+    /* ── FOOTER ─────────────────────────────────────────────────────── */
+    footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; font-size: 13px; color: var(--text-subtle); }
+    footer a:hover { color: var(--text-muted); }
+
+    /* ── EXPORT BUTTON (boolean flag: show-export-button) ──────────── */
+    #export-btn { display: none; align-items: center; gap: 6px; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: var(--r-sm); border: 1px solid var(--border); transition: border-color .15s, color .15s; }
+    #export-btn:hover { border-color: var(--teal-dark); color: var(--text); }
+    #export-btn.visible { display: flex; }
+
+    /* ── PRICING BADGE (string flag: pricing-badge) ─────────────────── */
+    #pricing-badge { display: none; position: absolute; top: 16px; right: 20px; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--teal); color: #fff; letter-spacing: .3px; text-transform: uppercase; }
+    #pricing-badge.visible { display: block; }
+
+    /* ── TESTIMONIAL (JSON flag: testimonial) ───────────────────────── */
+    #testimonial { display: none; max-width: 1200px; margin: 0 auto; padding: 0 48px 72px; }
+    #testimonial.visible { display: block; }
+    .testimonial-inner { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 40px 48px; display: flex; align-items: flex-start; gap: 32px; }
+    .testimonial-quote { font-size: 20px; font-weight: 600; line-height: 1.5; letter-spacing: -.3px; margin-bottom: 20px; }
+    .testimonial-quote::before { content: '\201C'; color: var(--teal-light); font-size: 28px; line-height: 0; vertical-align: -.2em; margin-right: 2px; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .testimonial-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .testimonial-name { font-size: 14px; font-weight: 600; }
+    .testimonial-role { font-size: 13px; color: var(--text-subtle); margin-top: 2px; }
+
+    /* ── LIVE CHAT BUBBLE (boolean flag: show-live-chat) ────────────── */
+    #live-chat { display: none; position: fixed; bottom: 24px; right: 24px; z-index: 998; flex-direction: column; align-items: flex-end; gap: 10px; }
+    #live-chat.visible { display: flex; }
+    .chat-tooltip { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 14px; font-size: 13px; color: var(--text-muted); white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+    .chat-bubble { width: 52px; height: 52px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 16px rgba(13,148,136,.4); cursor: pointer; transition: transform .15s; }
+    .chat-bubble:hover { transform: scale(1.08); }
+
+  </style>
+</head>
+<body>
+
+  <!-- ── PROMO BANNER (JSON flag: promo-banner) ──────────────────── -->
+  <div id="promo-banner">
+    <span id="banner-msg"></span>
+    <a id="banner-cta" href="#"></a>
+  </div>
+
+  <!-- ── NAV ─────────────────────────────────────────────────────── -->
+  <nav>
+    <div class="nav-logo">
+      <div class="nav-logo-mark">M</div>
+      Meridian
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#">Docs</a>
+      <a href="#">Blog</a>
+    </div>
+    <button class="btn btn-primary" id="nav-cta">Start free trial</button>
+  </nav>
+
+  <!-- ── HERO ────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-badge">✦ Now with AI-powered insights</div>
+    <h1>Analytics that move as fast<br>as <em>your team</em></h1>
+    <p>Real-time dashboards, automated reports, and AI insights — all in one place. No data warehouse required.</p>
+    <div class="hero-actions">
+      <button class="btn btn-primary-lg" id="hero-cta">Start free trial</button>
+      <button class="btn btn-ghost">See a demo</button>
+    </div>
+    <p class="trial-note">Try free for <span id="trial-days-hero">14</span> days &mdash; no credit card required.</p>
+  </section>
+
+  <!-- ── DASHBOARD PREVIEW ───────────────────────────────────────── -->
+  <div class="preview-section">
+    <div class="preview-wrap">
+      <div class="preview-chrome">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+        <div class="chrome-bar">app.meridian.io/dashboard</div>
+      </div>
+      <div class="preview-body">
+        <div class="sidebar">
+          <div class="sidebar-group-label">Main</div>
+          <div class="sidebar-item active">▦&nbsp; Dashboard</div>
+          <div class="sidebar-item">↗&nbsp; Analytics</div>
+          <div class="sidebar-item">◎&nbsp; Reports</div>
+          <div class="sidebar-group-label" style="margin-top:16px">Manage</div>
+          <div class="sidebar-item">⊞&nbsp; Sources</div>
+          <div class="sidebar-item">⚙&nbsp; Settings</div>
+        </div>
+        <div class="dash-main">
+          <div class="dash-row">
+            <div class="dash-content">
+              <div class="stats-grid">
+                <div class="stat-card"><div class="stat-label">Monthly Active Users</div><div class="stat-value">84,291</div><div class="stat-delta">↑ 12.4%</div></div>
+                <div class="stat-card"><div class="stat-label">Conversion Rate</div><div class="stat-value">3.8%</div><div class="stat-delta">↑ 0.6%</div></div>
+                <div class="stat-card"><div class="stat-label">Avg. Session</div><div class="stat-value">4m 12s</div><div class="stat-delta">↑ 8.1%</div></div>
+                <div class="stat-card"><div class="stat-label">Revenue (MRR)</div><div class="stat-value">$128k</div><div class="stat-delta">↑ 5.2%</div></div>
+              </div>
+              <div class="chart-card">
+                <div class="chart-head">
+                  <div>
+                    <div class="chart-title">Weekly Active Users</div>
+                    <div class="chart-sub">Last 8 weeks</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span class="chart-tag">Live</span>
+                    <button id="export-btn">↓ Export CSV</button>
+                  </div>
+                </div>
+                <div class="bars">
+                  <div class="bar" style="height:45%"></div>
+                  <div class="bar" style="height:58%"></div>
+                  <div class="bar" style="height:53%"></div>
+                  <div class="bar" style="height:72%"></div>
+                  <div class="bar" style="height:66%"></div>
+                  <div class="bar" style="height:79%"></div>
+                  <div class="bar" style="height:71%"></div>
+                  <div class="bar hi" style="height:100%"></div>
+                </div>
+                <div class="bar-labels">
+                  <div class="bar-label">Wk 9</div><div class="bar-label">10</div><div class="bar-label">11</div>
+                  <div class="bar-label">12</div><div class="bar-label">13</div><div class="bar-label">14</div>
+                  <div class="bar-label">15</div><div class="bar-label">16</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Insights panel — boolean flag: show-ai-insights -->
+            <div id="ai-panel">
+              <div class="ai-header">
+                <div class="ai-pulse"></div>
+                <div class="ai-title">AI Insights</div>
+              </div>
+              <div class="ai-body">
+                <div class="ai-card">
+                  <div class="ai-card-label">Anomaly</div>
+                  <div class="ai-card-text">Session duration up 8% vs prior week — likely tied to new onboarding flow.</div>
+                </div>
+                <div class="ai-card">
+                  <div class="ai-card-label">Forecast</div>
+                  <div class="ai-card-text">Projected MAU this month:</div>
+                  <div class="ai-card-value">91,400</div>
+                </div>
+                <div class="ai-card">
+                  <div class="ai-card-label">Suggestion</div>
+                  <div class="ai-card-text">Re-engage the 1,240 users dormant after week 2.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FEATURES ────────────────────────────────────────────────── -->
+  <section class="features" id="features">
+    <div class="eyebrow">Features</div>
+    <div class="section-title">Everything your data team needs</div>
+    <div class="section-sub">From raw events to boardroom-ready dashboards — Meridian does the heavy lifting.</div>
+    <div class="feature-grid">
+      <div class="feature-card"><div class="feature-icon">⚡</div><div class="feature-name">Real-time streaming</div><div class="feature-desc">Events appear on your dashboard the moment they happen. No polling, no delays.</div></div>
+      <div class="feature-card"><div class="feature-icon">⊞</div><div class="feature-name">Unlimited sources</div><div class="feature-desc">Connect any data source — Segment, Amplitude, Snowflake, or a direct webhook.</div></div>
+      <div class="feature-card"><div class="feature-icon">◎</div><div class="feature-name">Automated reports</div><div class="feature-desc">Schedule reports to go out weekly to your whole team, no manual exports required.</div></div>
+    </div>
+  </section>
+
+  <!-- ── TESTIMONIAL (JSON flag: testimonial) ──────────────────────── -->
+  <div id="testimonial">
+    <div class="testimonial-inner">
+      <div style="flex:1">
+        <div class="testimonial-quote" id="testimonial-quote">Meridian cut our reporting time in half. We went from weekly spreadsheets to live dashboards in a day.</div>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar" id="testimonial-initials">SK</div>
+          <div>
+            <div class="testimonial-name" id="testimonial-author">Sarah K.</div>
+            <div class="testimonial-role" id="testimonial-role">Head of Data, Stripe</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PRICING ─────────────────────────────────────────────────── -->
+  <section class="pricing" id="pricing">
+    <div class="eyebrow">Pricing</div>
+    <div class="section-title">Simple, transparent pricing</div>
+    <div class="section-sub" style="margin-bottom:36px">One plan. Everything included. No seat limits.</div>
+    <div class="pricing-card">
+      <div id="pricing-badge"></div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$49<span>/mo</span></div>
+      <div class="plan-trial">Free for <span id="trial-days-pricing">14</span> days — no credit card required.</div>
+      <ul class="plan-features">
+        <li><span class="check">✓</span> Unlimited dashboards</li>
+        <li><span class="check">✓</span> Real-time event streaming</li>
+        <li><span class="check">✓</span> AI Insights (beta)</li>
+        <li><span class="check">✓</span> Up to 10 data sources</li>
+        <li><span class="check">✓</span> <span id="retention-feature">90</span> days data retention</li>
+        <li><span class="check">✓</span> Priority support</li>
+      </ul>
+      <button class="btn btn-primary-lg" id="pricing-cta" style="width:100%">Start free trial</button>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ──────────────────────────────────────────────────── -->
+  <footer>
+    <div>© 2025 Meridian Inc. &mdash; <em style="opacity:.5;font-style:normal">FeaturePeep demo app</em></div>
+    <div style="display:flex;gap:24px"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Status</a></div>
+  </footer>
+
+  <!-- ── LIVE CHAT BUBBLE (boolean flag: show-live-chat) ──────────── -->
+  <div id="live-chat">
+    <div class="chat-tooltip">Chat with support ✦</div>
+    <div class="chat-bubble">💬</div>
+  </div>
+
+  <script src="https://unpkg.com/launchdarkly-js-client-sdk@3/dist/ldclient.min.js"></script>
+  <script>
+    /*
+     * FeaturePeep Demo — Meridian
+     * ─────────────────────────────────────────────────────────────────
+     * Flags (create these in your LaunchDarkly project):
+     *
+     *  show-ai-insights   boolean   default: false
+     *    Reveals the AI Insights panel in the dashboard preview.
+     *
+     *  cta-text           string    default: "Start free trial"
+     *    Variations: "Start free trial" | "Get started" | "Book a demo"
+     *    Controls every CTA button on the page simultaneously.
+     *
+     *  free-trial-days    number    default: 14
+     *    Variations: 7 | 14 | 30
+     *    Controls the trial-length copy in the hero and pricing section.
+     *
+     *  promo-banner       JSON      default: { "visible": false }
+     *    Full config shape:
+     *    {
+     *      "visible": true,
+     *      "message": "Meridian 2.0 is here — redesigned dashboards, faster insights.",
+     *      "theme":   "teal",
+     *      "cta":     { "label": "See what's new", "url": "#features" }
+     *    }
+     *    theme values: "teal" | "amber" | "rose"
+     * ─────────────────────────────────────────────────────────────────
+     */
+
+    const client = LDClient.initialize('6a09eed2d93e230aa81bcf49', {
+      kind:      'user',
+      key:       'meridian-demo-user',
+      anonymous: true,
+    });
+
+    function applyFlags() {
+      const showAI       = client.variation('show-ai-insights',   false);
+      const ctaText      = client.variation('cta-text',            'Start free trial');
+      const trialDays    = client.variation('free-trial-days',     14);
+      const banner       = client.variation('promo-banner',        { visible: false });
+      const showChat     = client.variation('show-live-chat',      false);
+      const pricingBadge = client.variation('pricing-badge',       '');
+      const retentionDays= client.variation('data-retention-days', 90);
+      const testimonial  = client.variation('testimonial',         { visible: false });
+
+      // boolean: show-ai-insights
+      document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
+
+      // string: cta-text
+      ['nav-cta', 'hero-cta', 'pricing-cta'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = ctaText;
+      });
+
+      // number: free-trial-days
+      ['trial-days-hero', 'trial-days-pricing'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = trialDays;
+      });
+
+      // json: promo-banner
+      const bannerEl = document.getElementById('promo-banner');
+      const msgEl    = document.getElementById('banner-msg');
+      const ctaEl    = document.getElementById('banner-cta');
+      if (banner && banner.visible) {
+        bannerEl.className  = 'visible theme-' + (banner.theme || 'teal');
+        msgEl.textContent   = banner.message || '';
+        ctaEl.textContent   = banner.cta?.label || '';
+        ctaEl.href          = banner.cta?.url   || '#';
+        ctaEl.style.display = banner.cta?.label ? 'inline' : 'none';
+      } else {
+        bannerEl.className = '';
+      }
+
+      // boolean: show-live-chat
+      document.getElementById('live-chat').classList.toggle('visible', !!showChat);
+
+      // string: pricing-badge
+      const badgeEl = document.getElementById('pricing-badge');
+      if (pricingBadge) {
+        badgeEl.textContent = pricingBadge;
+        badgeEl.classList.add('visible');
+      } else {
+        badgeEl.classList.remove('visible');
+      }
+
+      // number: data-retention-days
+      document.getElementById('retention-feature').textContent = retentionDays;
+
+      // json: testimonial
+      const tEl = document.getElementById('testimonial');
+      if (testimonial && testimonial.visible) {
+        document.getElementById('testimonial-quote').textContent    = testimonial.quote    || '';
+        document.getElementById('testimonial-author').textContent   = testimonial.author   || '';
+        document.getElementById('testimonial-role').textContent     = testimonial.role     || '';
+        document.getElementById('testimonial-initials').textContent = testimonial.initials || '';
+        tEl.classList.add('visible');
+      } else {
+        tEl.classList.remove('visible');
+      }
+
+    }
+
+    client.on('ready',  applyFlags);
+    client.on('change', applyFlags);
+  </script>
+</body>
+</html>
