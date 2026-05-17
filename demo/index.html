@@ -191,6 +191,34 @@
     footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; font-size: 13px; color: var(--text-subtle); }
     footer a:hover { color: var(--text-muted); }
 
+    /* ── MAINTENANCE MODE (boolean flag: maintenance-mode) ─────────── */
+    #maintenance-overlay {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: #0A0F1A;
+      align-items: center; justify-content: center; text-align: center;
+      flex-direction: column; padding: 24px;
+    }
+    #maintenance-overlay.visible { display: flex; }
+    .maint-status {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+      color: #FCA5A5; background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25);
+      padding: 6px 14px; border-radius: 20px; margin-bottom: 32px;
+    }
+    .maint-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #EF4444;
+      box-shadow: 0 0 8px #EF4444; animation: maint-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes maint-pulse { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+    .maint-logo { width: 56px; height: 56px; border-radius: 14px; background: #1E293B; border: 1px solid #334155; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: #94A3B8; margin: 0 auto 28px; }
+    .maint-title { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 12px; color: #F1F5F9; }
+    .maint-body { font-size: 15px; color: #64748B; line-height: 1.7; max-width: 420px; margin-bottom: 36px; }
+    .maint-eta { display: inline-flex; align-items: center; gap: 10px; background: #1E293B; border: 1px solid #334155; border-radius: var(--r); padding: 14px 24px; font-size: 14px; color: #94A3B8; margin-bottom: 32px; }
+    .maint-eta strong { color: #F1F5F9; font-weight: 600; }
+    .maint-links { display: flex; align-items: center; gap: 20px; font-size: 13px; color: #475569; }
+    .maint-links a { color: #475569; text-decoration: underline; text-underline-offset: 3px; }
+    .maint-links a:hover { color: #94A3B8; }
+
     /* ── SESSION TIMEOUT MODAL ──────────────────────────────────────── */
     #session-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index: 9000; align-items: center; justify-content: center; }
     #session-modal.visible { display: flex; }
@@ -499,6 +527,22 @@
     <div style="display:flex;gap:24px"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Status</a></div>
   </footer>
 
+  <!-- ── MAINTENANCE MODE (boolean flag: maintenance-mode) ──────────── -->
+  <div id="maintenance-overlay">
+    <div class="maint-status"><div class="maint-dot"></div>System offline</div>
+    <div class="maint-logo">M</div>
+    <div class="maint-title">Down for maintenance</div>
+    <p class="maint-body">We're making scheduled improvements to Meridian. Our team is working quickly to get things back up. Thanks for your patience.</p>
+    <div class="maint-eta">⏱ &nbsp;Estimated recovery: <strong>Today, 4:00 AM UTC</strong></div>
+    <div class="maint-links">
+      <a href="#">Status page</a>
+      <span>·</span>
+      <a href="#">Subscribe to updates</a>
+      <span>·</span>
+      <a href="mailto:support@meridian.io">Contact support</a>
+    </div>
+  </div>
+
   <!-- ── SIGNUP V1 — Classic (use-v2-flow: false) ─────────────────── -->
   <div class="signup-overlay" id="signup-v1">
     <div class="signup-card">
@@ -664,9 +708,13 @@
       const pricingBadge    = client.variation('pricing-badge',       '');
       const retentionDays   = client.variation('data-retention-days', 90);
       const testimonial     = client.variation('testimonial',         { visible: false });
-      const sessionTimeoutMs = client.variation('session-timeout-ms', 1800000);
+      const sessionTimeoutMs  = client.variation('session-timeout-ms', 1800000);
+      const maintenanceMode   = client.variation('maintenance-mode',    false);
       /* use-v2-flow read here so FeaturePeep surfaces it; openSignup() reads it at click time */
       client.variation('use-v2-flow', false);
+
+      // boolean: maintenance-mode
+      document.getElementById('maintenance-overlay').classList.toggle('visible', !!maintenanceMode);
 
       // boolean: show-ai-insights
       document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
