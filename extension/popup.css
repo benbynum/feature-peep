@@ -91,7 +91,7 @@ body.dark {
   --border-btn-hover: #6B7280;
 
   --text-primary:     #F9FAFB;
-  --text-secondary:   #9CA3AF;
+  --text-secondary:   #E2E8F0;
   --text-muted:       #6B7280;
   --text-hint:        #6B7280;
 
@@ -154,13 +154,13 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   color: var(--text-primary);
-  background: var(--bg-base);
+  background: transparent;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-#app { display: flex; flex-direction: column; height: 100%; position: relative; overflow: hidden; }
+#app { display: flex; flex-direction: column; height: 100%; position: relative; overflow: hidden; border-radius: 5px; background: var(--bg-base); }
 
 #view-main {
   display: flex;
@@ -664,6 +664,8 @@ img.provider-logo {
   transform: translateX(100%);
   transition: transform 0.22s ease;
   z-index: 20;
+  border-radius: 5px;
+  overflow: hidden;
 }
 
 body.settings-open .settings-overlay {
@@ -732,12 +734,14 @@ body.settings-open .settings-overlay {
   font-size: 11px;
   font-weight: 500;
   font-family: inherit;
-  padding: 3px 0;
-  min-width: 44px;
+  padding: 5px 14px;
   border: none;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .theme-seg-btn.active { background: var(--logo-color); color: #fff; }
