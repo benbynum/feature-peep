@@ -226,6 +226,8 @@
     #signup-v1 input { background: #2D3748; border: 1px solid #4A5568; border-radius: 6px; padding: 9px 12px; color: #E2E8F0; font-size: 14px; font-family: inherit; outline: none; }
     #signup-v1 input:focus { border-color: #718096; }
     #signup-v1 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #signup-v1 .field-row .field { min-width: 0; }
+    #signup-v1 .field-row input { width: 100%; }
     #signup-v1 .btn-v1-submit { width: 100%; margin-top: 8px; padding: 10px; background: #4A5568; color: #E2E8F0; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; }
     #signup-v1 .btn-v1-submit:hover { background: #718096; }
     #signup-v1 .signup-footer { text-align: center; font-size: 12px; color: #718096; margin-top: 16px; }
@@ -501,7 +503,6 @@
   <div class="signup-overlay" id="signup-v1">
     <div class="signup-card">
       <button class="signup-close" onclick="closeSignup()">✕</button>
-      <div class="signup-logo">M</div>
       <div class="v1-badge">Current flow · v1</div>
       <h2>Create your account</h2>
       <p class="signup-sub">Fill in the details below to get started.</p>
@@ -521,7 +522,6 @@
   <div class="signup-overlay" id="signup-v2">
     <div class="signup-card">
       <button class="signup-close" onclick="closeSignup()">✕</button>
-      <div class="signup-logo">M</div>
       <div class="v2-badge">New flow · v2</div>
       <h2>Start your free trial</h2>
       <p class="signup-sub">Try Meridian free for <strong id="signup-trial-days">14</strong> days. No credit card needed.</p>
