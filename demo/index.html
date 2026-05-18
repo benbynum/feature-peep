@@ -337,6 +337,57 @@
     .chat-bubble { width: 52px; height: 52px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 16px rgba(13,148,136,.4); cursor: pointer; transition: transform .15s; }
     .chat-bubble:hover { transform: scale(1.08); }
 
+    /* ── PROVIDER SWITCHER ──────────────────────────────────────────── */
+    #provider-switcher {
+      position: fixed; bottom: 24px; left: 24px; z-index: 997;
+      display: flex; flex-direction: column; gap: 6px;
+      background: rgba(15,23,42,.92); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 10px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 20px rgba(0,0,0,.45);
+    }
+    .switcher-caption {
+      font-size: 10px; color: var(--text-subtle); line-height: 1.3;
+    }
+    .switcher-controls { display: flex; align-items: center; gap: 8px; }
+    .switcher-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .7px; color: var(--text-subtle);
+    }
+    .switcher-tabs { display: flex; gap: 3px; }
+    .switcher-tab {
+      font-size: 11.5px; font-weight: 500; font-family: inherit;
+      padding: 4px 10px; border-radius: 6px; border: 1px solid transparent;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .switcher-tab:hover:not(.active) { background: rgba(255,255,255,.06); color: var(--text); }
+    .switcher-tab.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+    .switcher-divider { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+    .switcher-transport { display: flex; align-items: center; gap: 6px; }
+    .switcher-transport-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .7px; color: var(--text-subtle);
+    }
+    .switcher-tooltip-wrap { position: relative; }
+    .switcher-tooltip-wrap[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      width: 210px; background: rgba(17,24,39,.93); color: #F9FAFB;
+      font-size: 10.5px; line-height: 1.5; padding: 6px 9px; border-radius: 6px;
+      white-space: normal; pointer-events: none; z-index: 50;
+    }
+    .switcher-select {
+      font-size: 11.5px; font-family: inherit; font-weight: 500;
+      background: rgba(255,255,255,.06); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-muted); padding: 3px 24px 3px 8px;
+      cursor: pointer; outline: none; appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 7px center;
+    }
+    .switcher-select:not(:disabled):hover { border-color: var(--teal-dark); color: var(--text); }
+    .switcher-select:disabled { opacity: .4; cursor: not-allowed; }
+
   </style>
 </head>
 <body>
@@ -639,179 +690,219 @@
     <div class="chat-bubble">💬</div>
   </div>
 
-  <script src="https://unpkg.com/launchdarkly-js-client-sdk@3/dist/ldclient.min.js"></script>
+  <!-- ── PROVIDER SWITCHER ─────────────────────────────────────────── -->
+  <div id="provider-switcher">
+    <div class="switcher-caption">Page settings — test different providers &amp; transport layers</div>
+    <div class="switcher-controls">
+      <span class="switcher-label">Provider</span>
+      <select class="switcher-select" id="provider-select">
+        <option value="launchdarkly">LaunchDarkly</option>
+        <option value="posthog">PostHog</option>
+      </select>
+      <div class="switcher-divider"></div>
+      <span class="switcher-transport-label">Transport</span>
+      <div class="switcher-tooltip-wrap" id="transport-tooltip-wrap">
+        <select class="switcher-select" id="transport-select">
+          <option value="streaming">Streaming</option>
+          <option value="polling">Polling</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   <script>
-    /*
-     * FeaturePeep Demo — Meridian
-     * ─────────────────────────────────────────────────────────────────
-     * Flags (create these in your LaunchDarkly project):
-     *
-     *  show-ai-insights   boolean   default: false
-     *    Reveals the AI Insights panel in the dashboard preview.
-     *
-     *  cta-text           string    default: "Start free trial"
-     *    Variations: "Start free trial" | "Get started" | "Book a demo"
-     *    Controls every CTA button on the page simultaneously.
-     *
-     *  free-trial-days    number    default: 14
-     *    Variations: 7 | 14 | 30
-     *    Controls the trial-length copy in the hero and pricing section.
-     *
-     *  promo-banner       JSON      default: { "visible": false }
-     *    Full config shape:
-     *    {
-     *      "visible": true,
-     *      "message": "Meridian 2.0 is here — redesigned dashboards, faster insights.",
-     *      "theme":   "teal",
-     *      "cta":     { "label": "See what's new", "url": "#features" }
-     *    }
-     *    theme values: "teal" | "amber" | "rose"
-     * ─────────────────────────────────────────────────────────────────
-     */
+    // ── Query params ─────────────────────────────────────────────────
+    const params    = new URLSearchParams(location.search);
+    const provider  = params.get('provider')  || 'launchdarkly';
+    const transport = params.get('transport') || 'streaming';
 
-    const client = LDClient.initialize('6a09eed2d93e230aa81bcf49', {
-      kind:      'user',
-      key:       'meridian-demo-user',
-      anonymous: true,
+    // ── Provider switcher ────────────────────────────────────────────
+    const providerSelect = document.getElementById('provider-select');
+    providerSelect.value = provider;
+    providerSelect.addEventListener('change', () => {
+      const p = providerSelect.value;
+      const q = new URLSearchParams({ provider: p });
+      if (p === 'launchdarkly') q.set('transport', 'streaming');
+      location.search = q.toString();
     });
 
-    // ── Signup modal ───────────────────────────────────────────────
-    function openSignup() {
-      const useV2 = client.variation('use-v2-flow', false);
-      document.getElementById(useV2 ? 'signup-v2' : 'signup-v1').classList.add('visible');
-    }
-    function closeSignup() {
-      document.getElementById('signup-v1').classList.remove('visible');
-      document.getElementById('signup-v2').classList.remove('visible');
-    }
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSignup(); });
+    const transportSelect = document.getElementById('transport-select');
+    const tooltipWrap     = document.getElementById('transport-tooltip-wrap');
 
-    // ── Session timeout ────────────────────────────────────────────
-    let sessionTimer     = null;
-    let countdownInterval = null;
-
-    function startSessionTimer(ms) {
-      clearTimeout(sessionTimer);
-      sessionTimer = setTimeout(showSessionWarning, ms);
+    if (provider === 'posthog') {
+      transportSelect.disabled = true;
+      transportSelect.value    = 'polling';
+      tooltipWrap.dataset.tooltip = 'PostHog uses polling — streaming is not available.';
+    } else {
+      transportSelect.value = transport;
+      transportSelect.addEventListener('change', () => {
+        location.search = new URLSearchParams({ provider: 'launchdarkly', transport: transportSelect.value }).toString();
+      });
     }
 
-    function showSessionWarning() {
-      const modal = document.getElementById('session-modal');
-      modal.classList.add('visible');
-      let secs = 30;
-      document.getElementById('session-countdown').textContent = secs;
-      countdownInterval = setInterval(() => {
-        secs--;
+    // ── Adapter ──────────────────────────────────────────────────────
+    let adapter;
+
+    function initApp() {
+      function openSignup() {
+        const useV2 = adapter.variation('use-v2-flow', false);
+        document.getElementById(useV2 ? 'signup-v2' : 'signup-v1').classList.add('visible');
+      }
+      function closeSignup() {
+        document.getElementById('signup-v1').classList.remove('visible');
+        document.getElementById('signup-v2').classList.remove('visible');
+      }
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSignup(); });
+
+      let sessionTimer      = null;
+      let countdownInterval = null;
+
+      function startSessionTimer(ms) {
+        clearTimeout(sessionTimer);
+        sessionTimer = setTimeout(showSessionWarning, ms);
+      }
+
+      function showSessionWarning() {
+        const modal = document.getElementById('session-modal');
+        modal.classList.add('visible');
+        let secs = 30;
         document.getElementById('session-countdown').textContent = secs;
-        if (secs <= 0) {
-          clearInterval(countdownInterval);
-          document.getElementById('session-signed-out').classList.add('visible');
-          document.getElementById('session-warning-body').classList.add('hidden');
+        countdownInterval = setInterval(() => {
+          secs--;
+          document.getElementById('session-countdown').textContent = secs;
+          if (secs <= 0) {
+            clearInterval(countdownInterval);
+            document.getElementById('session-signed-out').classList.add('visible');
+            document.getElementById('session-warning-body').classList.add('hidden');
+          }
+        }, 1000);
+      }
+
+      document.getElementById('session-stay').addEventListener('click', () => {
+        clearInterval(countdownInterval);
+        document.getElementById('session-modal').classList.remove('visible');
+        document.getElementById('session-signed-out').classList.remove('visible');
+        document.getElementById('session-warning-body').classList.remove('hidden');
+        startSessionTimer(adapter.variation('session-timeout-ms', 1800000));
+      });
+
+      document.getElementById('session-signout').addEventListener('click', () => {
+        clearInterval(countdownInterval);
+        document.getElementById('session-signed-out').classList.add('visible');
+        document.getElementById('session-warning-body').classList.add('hidden');
+      });
+
+      function applyFlags() {
+        const showAI           = adapter.variation('show-ai-insights',         false);
+        const ctaText          = adapter.variation('cta-text',                 'Start free trial');
+        const trialDays        = Number(adapter.variation('free-trial-days',   14));
+        const banner           = adapter.variation('promo-banner',             { visible: false });
+        const showChat         = adapter.variation('show-live-chat',           false);
+        const pricingBadge     = adapter.variation('pricing-badge',            '');
+        const retentionDays    = Number(adapter.variation('data-retention-days', 90));
+        const testimonial      = adapter.variation('testimonial',              { visible: false });
+        const sessionTimeoutMs = Number(adapter.variation('session-timeout-ms', 1800000));
+        const maintenanceMode  = adapter.variation('maintenance-mode',         false);
+        const premiumEnabled   = adapter.variation('premium-features-enabled', true);
+        const showDemoControls = adapter.variation('show-demo-controls',       true);
+        adapter.variation('use-v2-flow', false); // surface in FeaturePeep
+
+        document.getElementById('provider-switcher').style.display = showDemoControls ? '' : 'none';
+
+        document.getElementById('maintenance-overlay').classList.toggle('visible', !!maintenanceMode);
+
+        document.querySelectorAll('.premium-gate').forEach(el => el.classList.toggle('locked', !premiumEnabled));
+        document.getElementById('export-btn').classList.toggle('locked', !premiumEnabled);
+
+        document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
+
+        ['nav-cta', 'hero-cta', 'pricing-cta'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) { el.textContent = ctaText; el.onclick = openSignup; }
+        });
+
+        ['trial-days-hero', 'trial-days-pricing', 'signup-trial-days', 'signup-trial-days-2'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = trialDays;
+        });
+
+        const bannerEl = document.getElementById('promo-banner');
+        if (banner && banner.visible) {
+          bannerEl.className = 'visible theme-' + (banner.theme || 'teal');
+          document.getElementById('banner-msg').textContent = banner.message || '';
+          const ctaEl = document.getElementById('banner-cta');
+          ctaEl.textContent   = banner.cta?.label || '';
+          ctaEl.href          = banner.cta?.url   || '#';
+          ctaEl.style.display = banner.cta?.label ? 'inline' : 'none';
+        } else {
+          bannerEl.className = '';
         }
-      }, 1000);
+
+        document.getElementById('live-chat').classList.toggle('visible', !!showChat);
+
+        const badgeEl = document.getElementById('pricing-badge');
+        if (pricingBadge) {
+          badgeEl.textContent = pricingBadge;
+          badgeEl.classList.add('visible');
+        } else {
+          badgeEl.classList.remove('visible');
+        }
+
+        document.getElementById('retention-feature').textContent = retentionDays;
+
+        const tEl = document.getElementById('testimonial');
+        if (testimonial && testimonial.visible) {
+          document.getElementById('testimonial-quote').textContent    = testimonial.quote    || '';
+          document.getElementById('testimonial-author').textContent   = testimonial.author   || '';
+          document.getElementById('testimonial-role').textContent     = testimonial.role     || '';
+          document.getElementById('testimonial-initials').textContent = testimonial.initials || '';
+          tEl.classList.add('visible');
+        } else {
+          tEl.classList.remove('visible');
+        }
+
+        startSessionTimer(sessionTimeoutMs);
+      }
+
+      adapter.ready(applyFlags);
     }
 
-    document.getElementById('session-stay').addEventListener('click', () => {
-      clearInterval(countdownInterval);
-      document.getElementById('session-modal').classList.remove('visible');
-      document.getElementById('session-signed-out').classList.remove('visible');
-      document.getElementById('session-warning-body').classList.remove('hidden');
-      startSessionTimer(client.variation('session-timeout-ms', 1800000));
-    });
+    // ── LaunchDarkly ─────────────────────────────────────────────────
+    if (provider === 'launchdarkly') {
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/launchdarkly-js-client-sdk@3/dist/ldclient.min.js';
+      s.onload = () => {
+        const ldClient = LDClient.initialize('6a09eed2d93e230aa81bcf49',
+          { kind: 'user', key: 'meridian-demo-user', anonymous: true },
+          { streaming: transport === 'streaming' }
+        );
+        adapter = {
+          variation(key, def) { return ldClient.variation(key, def); },
+          ready(cb)           { ldClient.on('ready', cb); ldClient.on('change', cb); },
+        };
+        initApp();
+      };
+      document.head.appendChild(s);
 
-    document.getElementById('session-signout').addEventListener('click', () => {
-      clearInterval(countdownInterval);
-      document.getElementById('session-signed-out').classList.add('visible');
-      document.getElementById('session-warning-body').classList.add('hidden');
-    });
-
-    // ── Flag application ───────────────────────────────────────────
-    function applyFlags() {
-      const showAI          = client.variation('show-ai-insights',   false);
-      const ctaText         = client.variation('cta-text',            'Start free trial');
-      const trialDays       = client.variation('free-trial-days',     14);
-      const banner          = client.variation('promo-banner',        { visible: false });
-      const showChat        = client.variation('show-live-chat',      false);
-      const pricingBadge    = client.variation('pricing-badge',       '');
-      const retentionDays   = client.variation('data-retention-days', 90);
-      const testimonial     = client.variation('testimonial',         { visible: false });
-      const sessionTimeoutMs      = client.variation('session-timeout-ms',       1800000);
-      const maintenanceMode       = client.variation('maintenance-mode',          false);
-      const premiumFeaturesEnabled = client.variation('premium-features-enabled', true);
-      /* use-v2-flow read here so FeaturePeep surfaces it; openSignup() reads it at click time */
-      client.variation('use-v2-flow', false);
-
-      // boolean: maintenance-mode
-      document.getElementById('maintenance-overlay').classList.toggle('visible', !!maintenanceMode);
-
-      // boolean: premium-features-enabled
-      document.querySelectorAll('.premium-gate').forEach(el => {
-        el.classList.toggle('locked', !premiumFeaturesEnabled);
+    // ── PostHog ──────────────────────────────────────────────────────
+    } else if (provider === 'posthog') {
+      !function(t,e){var o,n,p,r;e.__SV||(window.posthog&&window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="Mi Ri init Vi Gi Rr Wi Ji Bi capture calculateEventProperties tn register register_once register_for_session unregister unregister_for_session an getFeatureFlag getFeatureFlagPayload getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey displaySurvey cancelPendingSurvey canRenderSurvey canRenderSurveyAsync un identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset setIdentity clearIdentity get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException addExceptionStep captureLog startExceptionAutocapture stopExceptionAutocapture loadToolbar get_property getSessionProperty nn Xi createPersonProfile setInternalOrTestUser sn Hi cn opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_explicit_consent_status is_capturing clear_opt_in_out_capturing Ki debug Lr rn getPageViewId captureTraceFeedback captureTraceMetric Di".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+      posthog.init('phc_mRYMpVfMYTgtevq79AszbaALsYudajUnorupxDgZAXNk', {
+        api_host: 'https://us.i.posthog.com',
+        defaults: '2026-01-30',
+        person_profiles: 'identified_only',
       });
-      document.getElementById('export-btn').classList.toggle('locked', !premiumFeaturesEnabled);
-
-      // boolean: show-ai-insights
-      document.getElementById('ai-panel').classList.toggle('visible', !!showAI);
-
-      // string: cta-text
-      ['nav-cta', 'hero-cta', 'pricing-cta'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) { el.textContent = ctaText; el.onclick = openSignup; }
-      });
-
-      // number: free-trial-days
-      ['trial-days-hero', 'trial-days-pricing', 'signup-trial-days', 'signup-trial-days-2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = trialDays;
-      });
-
-      // json: promo-banner
-      const bannerEl = document.getElementById('promo-banner');
-      const msgEl    = document.getElementById('banner-msg');
-      const ctaEl    = document.getElementById('banner-cta');
-      if (banner && banner.visible) {
-        bannerEl.className  = 'visible theme-' + (banner.theme || 'teal');
-        msgEl.textContent   = banner.message || '';
-        ctaEl.textContent   = banner.cta?.label || '';
-        ctaEl.href          = banner.cta?.url   || '#';
-        ctaEl.style.display = banner.cta?.label ? 'inline' : 'none';
-      } else {
-        bannerEl.className = '';
-      }
-
-      // boolean: show-live-chat
-      document.getElementById('live-chat').classList.toggle('visible', !!showChat);
-
-      // string: pricing-badge
-      const badgeEl = document.getElementById('pricing-badge');
-      if (pricingBadge) {
-        badgeEl.textContent = pricingBadge;
-        badgeEl.classList.add('visible');
-      } else {
-        badgeEl.classList.remove('visible');
-      }
-
-      // number: data-retention-days
-      document.getElementById('retention-feature').textContent = retentionDays;
-
-      // json: testimonial
-      const tEl = document.getElementById('testimonial');
-      if (testimonial && testimonial.visible) {
-        document.getElementById('testimonial-quote').textContent    = testimonial.quote    || '';
-        document.getElementById('testimonial-author').textContent   = testimonial.author   || '';
-        document.getElementById('testimonial-role').textContent     = testimonial.role     || '';
-        document.getElementById('testimonial-initials').textContent = testimonial.initials || '';
-        tEl.classList.add('visible');
-      } else {
-        tEl.classList.remove('visible');
-      }
-
-      // number: session-timeout-ms — restart timer on every flag change
-      startSessionTimer(sessionTimeoutMs);
+      adapter = {
+        variation(key, def) {
+          const payload = posthog.getFeatureFlagPayload(key);
+          if (payload !== undefined && payload !== null) return payload;
+          const v = posthog.getFeatureFlag(key);
+          return (v === undefined || v === null) ? def : v;
+        },
+        ready(cb) { posthog.onFeatureFlags(cb); },
+      };
+      initApp();
     }
-
-    client.on('ready',  applyFlags);
-    client.on('change', applyFlags);
   </script>
 </body>
 </html>
