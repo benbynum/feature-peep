@@ -580,10 +580,10 @@
     if (!ofProvider) return;
     const success = ofProvider.instrumentSDK(sdk, () => overrides, (flags) => {
       currentFlags = flags;
-      if (!detectedProvider) setDetected("openfeature", "sse");
+      setDetected("openfeature", "sse");
       notify();
     });
-    if (success && !detectedProvider) setDetected("openfeature", "sse");
+    if (success) setDetected("openfeature", "sse");
   }
   (function setupOpenFeatureDetection() {
     if (typeof window.OpenFeature !== "undefined") {

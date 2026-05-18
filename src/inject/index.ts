@@ -239,10 +239,11 @@ function tryHookOpenFeature(sdk: unknown): void {
   if (!ofProvider) return
   const success = ofProvider.instrumentSDK!(sdk, () => overrides, (flags: FlagsMap) => {
     currentFlags = flags
-    if (!detectedProvider) setDetected('openfeature', 'sse')
+    setDetected('openfeature', 'sse')
     notify()
   })
-  if (success && !detectedProvider) setDetected('openfeature', 'sse')
+  // OpenFeature wraps an underlying provider — always take precedence over URL-based detection
+  if (success) setDetected('openfeature', 'sse')
 }
 
 ;(function setupOpenFeatureDetection() {

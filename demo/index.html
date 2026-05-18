@@ -698,6 +698,7 @@
       <select class="switcher-select" id="provider-select">
         <option value="launchdarkly">LaunchDarkly</option>
         <option value="posthog">PostHog</option>
+        <option value="openfeature">OpenFeature (LD)</option>
       </select>
       <div class="switcher-divider"></div>
       <span class="switcher-transport-label">Transport</span>
@@ -736,7 +737,7 @@
     } else {
       transportSelect.value = transport;
       transportSelect.addEventListener('change', () => {
-        location.search = new URLSearchParams({ provider: 'launchdarkly', transport: transportSelect.value }).toString();
+        location.search = new URLSearchParams({ provider, transport: transportSelect.value }).toString();
       });
     }
 
@@ -902,6 +903,32 @@
         ready(cb) { posthog.onFeatureFlags(cb); },
       };
       initApp();
+
+    // ── OpenFeature (LaunchDarkly provider) ──────────────────────────
+    } else if (provider === 'openfeature') {
+      import('https://esm.sh/@openfeature/web-sdk').then(({ OpenFeature, ProviderEvents }) => {
+        return import('https://esm.sh/@openfeature/launchdarkly-client-provider').then(({ LaunchDarklyClientProvider }) => {
+          // Expose on window so FeaturePeep's property-setter trap fires and instruments the SDK
+          window.OpenFeature = OpenFeature;
+          OpenFeature.setContext({ targetingKey: 'meridian-demo-user', anonymous: true });
+          const ldProvider = new LaunchDarklyClientProvider('6a09eed2d93e230aa81bcf49', { streaming: transport === 'streaming' });
+          OpenFeature.setProvider(ldProvider);
+          const client = OpenFeature.getClient();
+          adapter = {
+            variation(key, def) {
+              if (typeof def === 'boolean') return client.getBooleanValue(key, def);
+              if (typeof def === 'number')  return client.getNumberValue(key, def);
+              if (typeof def === 'object' && def !== null) return client.getObjectValue(key, def);
+              return client.getStringValue(key, String(def));
+            },
+            ready(cb) {
+              OpenFeature.addHandler(ProviderEvents.Ready, cb);
+              OpenFeature.addHandler(ProviderEvents.ConfigurationChanged, cb);
+            },
+          };
+          initApp();
+        });
+      });
     }
   </script>
 </body>
