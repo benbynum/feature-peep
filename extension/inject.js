@@ -402,6 +402,12 @@
   var overrides = {};
   var detectedProvider = null;
   var detectedTransport = null;
+  var overridesReady = false;
+  var overridesReadyCallbacks = [];
+  function waitForOverrides() {
+    if (overridesReady) return Promise.resolve();
+    return new Promise((resolve) => overridesReadyCallbacks.push(resolve));
+  }
   var providers = [create(), create2(), create3()];
   function getProvider(id) {
     if (!id) return null;
@@ -433,6 +439,8 @@
     switch (e.data.type) {
       case MSG_INIT_OVERRIDES:
         overrides = e.data.overrides || {};
+        overridesReady = true;
+        overridesReadyCallbacks.splice(0).forEach((r) => r());
         log("INIT_OVERRIDES: %o", overrides);
         break;
       case MSG_SET_OVERRIDE:
@@ -455,8 +463,11 @@
   var OriginalFetch = window.fetch;
   window.fetch = async function(input, init) {
     const url = input instanceof Request ? input.url : String(input);
-    const response = await OriginalFetch(input, init);
     const detected = detectProvider(url);
+    const [response] = await Promise.all([
+      OriginalFetch(input, init),
+      detected?.transport === "polling" ? waitForOverrides() : Promise.resolve()
+    ]);
     if (!detected || detected.transport !== "polling" || !response.ok) return response;
     log("fetch: polling URL matched (%s) %s %d", detected.id, url.split("?")[0], response.status);
     try {

@@ -18,6 +18,13 @@ let currentFlags: FlagsMap = {}
 let overrides: Overrides = {}
 let detectedProvider: ProviderId | null = null
 let detectedTransport: Transport | null = null
+let overridesReady = false
+const overridesReadyCallbacks: Array<() => void> = []
+
+function waitForOverrides(): Promise<void> {
+  if (overridesReady) return Promise.resolve()
+  return new Promise(resolve => overridesReadyCallbacks.push(resolve))
+}
 
 const providers: Provider[] = [createLaunchDarkly(), createOpenFeature(), createPostHog()]
 
@@ -62,6 +69,8 @@ window.addEventListener('message', (e: MessageEvent) => {
   switch (e.data.type) {
     case MSG_INIT_OVERRIDES:
       overrides = e.data.overrides || {}
+      overridesReady = true
+      overridesReadyCallbacks.splice(0).forEach(r => r())
       log('INIT_OVERRIDES: %o', overrides)
       break
     case MSG_SET_OVERRIDE:
@@ -88,8 +97,13 @@ const OriginalFetch = window.fetch
 
 window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = input instanceof Request ? input.url : String(input)
-  const response = await OriginalFetch(input, init)
   const detected = detectProvider(url)
+  // Race the network request against the overrides round-trip so overrides are
+  // ready to apply when the response arrives, with no added latency.
+  const [response] = await Promise.all([
+    OriginalFetch(input, init),
+    detected?.transport === 'polling' ? waitForOverrides() : Promise.resolve(),
+  ])
   if (!detected || detected.transport !== 'polling' || !response.ok) return response
 
   log('fetch: polling URL matched (%s) %s %d', detected.id, url.split('?')[0], response.status)
