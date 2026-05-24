@@ -12,8 +12,7 @@ export function detectProvider(url: string): DetectedProvider | null {
     if (/(?:^|\.)(?:app|sdk)\.launchdarkly\.com$/.test(host)) {
       return { id: 'launchdarkly', transport: 'polling' }
     }
-    if (/\/sdk\/evalx\/[a-f0-9-]{20,}\/contexts\//i.test(path) ||
-        /\/sdk\/eval\/[a-f0-9-]{20,}\/users\//i.test(path)) {
+    if (/\/sdk\/evalx\/[a-f0-9-]{20,}\/contexts\//i.test(path) || /\/sdk\/eval\/[a-f0-9-]{20,}\/users\//i.test(path)) {
       return { id: 'launchdarkly', transport: 'polling' }
     }
     if (/\/eval\/[a-f0-9-]{20,}\//.test(path)) {
@@ -27,6 +26,9 @@ export function detectProvider(url: string): DetectedProvider | null {
     }
     if (/\/ofrep\/v1\//.test(path)) {
       return { id: 'openfeature', transport: 'polling' }
+    }
+    if (host === 'cdn.optimizely.com' && /^\/datafiles\/[A-Za-z0-9_-]+\.json$/.test(path)) {
+      return { id: 'optimizely', transport: 'polling' }
     }
   } catch (_) {}
   return null

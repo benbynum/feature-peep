@@ -2,7 +2,7 @@ export type FlagValue = unknown
 export type FlagsMap = Record<string, { value: FlagValue }>
 export type Overrides = Record<string, FlagValue>
 export type Transport = 'sse' | 'polling'
-export type ProviderId = 'launchdarkly' | 'openfeature' | 'posthog'
+export type ProviderId = 'launchdarkly' | 'openfeature' | 'optimizely' | 'posthog'
 
 export interface DetectedProvider {
   id: ProviderId

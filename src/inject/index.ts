@@ -2,16 +2,16 @@ import { log } from './log.js'
 import { detectProvider } from './detection.js'
 import { create as createLaunchDarkly } from './providers/launchdarkly.js'
 import { create as createOpenFeature } from './providers/openfeature.js'
+import { create as createOptimizely } from './providers/optimizely.js'
 import { create as createPostHog } from './providers/posthog.js'
-import {
-  SOURCE_INJECT, SOURCE_CONTENT,
-  MSG_FLAGS_UPDATE, MSG_REQUEST_OVERRIDES,
-  MSG_INIT_OVERRIDES, MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
-} from '../constants.js'
+import { SOURCE_INJECT, SOURCE_CONTENT, MSG_FLAGS_UPDATE, MSG_REQUEST_OVERRIDES, MSG_INIT_OVERRIDES, MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES } from '../constants.js'
 import type { FlagsMap, Overrides, Provider, ProviderId, Transport } from '../types.js'
 
 declare global {
-  interface Window { OpenFeature?: unknown }
+  interface Window {
+    OpenFeature?: unknown
+    optimizelyClient?: unknown
+  }
 }
 
 let currentFlags: FlagsMap = {}
@@ -26,7 +26,7 @@ function waitForOverrides(): Promise<void> {
   return new Promise(resolve => overridesReadyCallbacks.push(resolve))
 }
 
-const providers: Provider[] = [createLaunchDarkly(), createOpenFeature(), createPostHog()]
+const providers: Provider[] = [createLaunchDarkly(), createOpenFeature(), createOptimizely(), createPostHog()]
 
 function getProvider(id: ProviderId | null): Provider | null {
   if (!id) return null
@@ -34,14 +34,17 @@ function getProvider(id: ProviderId | null): Provider | null {
 }
 
 function notify(): void {
-  window.postMessage({
-    source: SOURCE_INJECT,
-    type: MSG_FLAGS_UPDATE,
-    flags: currentFlags,
-    overrides,
-    provider: detectedProvider,
-    transport: detectedTransport,
-  }, '*')
+  window.postMessage(
+    {
+      source: SOURCE_INJECT,
+      type: MSG_FLAGS_UPDATE,
+      flags: currentFlags,
+      overrides,
+      provider: detectedProvider,
+      transport: detectedTransport,
+    },
+    '*',
+  )
 }
 
 function setDetected(id: ProviderId, transport: Transport): void {
@@ -95,15 +98,12 @@ window.addEventListener('message', (e: MessageEvent) => {
 
 const OriginalFetch = window.fetch
 
-window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = input instanceof Request ? input.url : String(input)
   const detected = detectProvider(url)
   // Race the network request against the overrides round-trip so overrides are
   // ready to apply when the response arrives, with no added latency.
-  const [response] = await Promise.all([
-    OriginalFetch(input, init),
-    detected?.transport === 'polling' ? waitForOverrides() : Promise.resolve(),
-  ])
+  const [response] = await Promise.all([OriginalFetch(input, init), detected?.transport === 'polling' ? waitForOverrides() : Promise.resolve()])
   if (!detected || detected.transport !== 'polling' || !response.ok) return response
 
   log('fetch: polling URL matched (%s) %s %d', detected.id, url.split('?')[0], response.status)
@@ -143,12 +143,12 @@ function CustomXHR(): XMLHttpRequest {
 
   const originalOpen = xhr.open.bind(xhr) as (...args: unknown[]) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(xhr as any).open = function(method: unknown, url: unknown, ...args: unknown[]): void {
+  ;(xhr as any).open = function (method: unknown, url: unknown, ...args: unknown[]): void {
     requestUrl = typeof url === 'string' ? url : String(url)
     originalOpen(method, url, ...args)
   }
 
-  xhr.addEventListener('readystatechange', function() {
+  xhr.addEventListener('readystatechange', function () {
     if (xhr.readyState !== 4 || xhr.status !== 200) return
     const detected = detectProvider(requestUrl)
     if (!detected || detected.transport !== 'polling') return
@@ -164,7 +164,9 @@ function CustomXHR(): XMLHttpRequest {
       const modifiedJson = JSON.stringify(modified)
       Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
       Object.defineProperty(xhr, 'response', {
-        get: function() { return xhr.responseType === 'json' ? modified : modifiedJson },
+        get: function () {
+          return xhr.responseType === 'json' ? modified : modifiedJson
+        },
         configurable: true,
       })
       log('XHR: patched responseText')
@@ -199,10 +201,11 @@ function CustomEventSource(url: string | URL, init?: EventSourceInit): EventSour
     return es
   }
 
-  if (!provider) return es
+  if (!provider)
+    return es
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(es as any).addEventListener = function(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(es as any).addEventListener = function (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
     if (!provider.sseEventTypes.has(type)) {
       originalAEL(type, listener, options)
       return
@@ -211,26 +214,30 @@ function CustomEventSource(url: string | URL, init?: EventSourceInit): EventSour
     const fn = typeof listener === 'function' ? listener : listener.handleEvent.bind(listener)
     provider.registerListener(type, fn as (e: MessageEvent) => void)
 
-    originalAEL(type, (e: Event) => {
-      try {
-        const raw: unknown = JSON.parse((e as MessageEvent).data)
-        const result = provider.processSSEEvent(type, raw, currentFlags, overrides)
-        if (result) {
-          if (result.flags) currentFlags = result.flags
-          if (result.flagsChanged) {
-            setDetected(detected!.id, 'sse')
-            log('EventSource %s: %d flags, provider=%s', type, Object.keys(currentFlags).length, detected!.id)
-            notify()
+    originalAEL(
+      type,
+      (e: Event) => {
+        try {
+          const raw: unknown = JSON.parse((e as MessageEvent).data)
+          const result = provider.processSSEEvent(type, raw, currentFlags, overrides)
+          if (result) {
+            if (result.flags) currentFlags = result.flags
+            if (result.flagsChanged) {
+              setDetected(detected!.id, 'sse')
+              log('EventSource %s: %d flags, provider=%s', type, Object.keys(currentFlags).length, detected!.id)
+              notify()
+            }
+            if (result.proxyData != null) {
+              const proxied = Object.create(e, { data: { value: result.proxyData } }) as Event
+              fn(proxied as MessageEvent)
+              return
+            }
           }
-          if (result.proxyData != null) {
-            const proxied = Object.create(e, { data: { value: result.proxyData } }) as Event
-            fn(proxied as MessageEvent)
-            return
-          }
-        }
-      } catch (_) {}
-      fn(e as MessageEvent)
-    }, options)
+        } catch (_) {}
+        fn(e as MessageEvent)
+      },
+      options,
+    )
   }
 
   return es
@@ -251,11 +258,15 @@ window.postMessage({ source: SOURCE_INJECT, type: MSG_REQUEST_OVERRIDES, origin:
 function tryHookOpenFeature(sdk: unknown): void {
   const ofProvider = getProvider('openfeature')
   if (!ofProvider) return
-  const success = ofProvider.instrumentSDK!(sdk, () => overrides, (flags: FlagsMap) => {
-    currentFlags = flags
-    setDetected('openfeature', 'sse')
-    notify()
-  })
+  const success = ofProvider.instrumentSDK!(
+    sdk,
+    () => overrides,
+    (flags: FlagsMap) => {
+      currentFlags = flags
+      setDetected('openfeature', 'sse')
+      notify()
+    },
+  )
   // OpenFeature wraps an underlying provider — always take precedence over URL-based detection
   if (success) setDetected('openfeature', 'sse')
 }
@@ -270,6 +281,38 @@ function tryHookOpenFeature(sdk: unknown): void {
     set(sdk: unknown) {
       Object.defineProperty(window, 'OpenFeature', { value: sdk, writable: true, configurable: true })
       tryHookOpenFeature(sdk)
+    },
+  })
+})()
+
+// ── Optimizely SDK detection ──────────────────────────────────────────────
+
+function tryHookOptimizely(sdk: unknown): void {
+  const optProvider = getProvider('optimizely')
+  if (!optProvider) return
+  const success = optProvider.instrumentSDK!(
+    sdk,
+    () => overrides,
+    (flags: FlagsMap) => {
+      currentFlags = flags
+      setDetected('optimizely', 'polling')
+      notify()
+    },
+  )
+  // Pages expose the client explicitly for the extension; URL-based detection still works in parallel.
+  if (success) setDetected('optimizely', 'polling')
+}
+
+;(function setupOptimizelyDetection() {
+  if (typeof window.optimizelyClient !== 'undefined') {
+    tryHookOptimizely(window.optimizelyClient)
+    return
+  }
+  Object.defineProperty(window, 'optimizelyClient', {
+    configurable: true,
+    set(sdk: unknown) {
+      Object.defineProperty(window, 'optimizelyClient', { value: sdk, writable: true, configurable: true })
+      tryHookOptimizely(sdk)
     },
   })
 })()

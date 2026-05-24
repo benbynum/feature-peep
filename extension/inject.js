@@ -30,6 +30,9 @@
       if (/\/ofrep\/v1\//.test(path)) {
         return { id: "openfeature", transport: "polling" };
       }
+      if (host === "cdn.optimizely.com" && /^\/datafiles\/[A-Za-z0-9_-]+\.json$/.test(path)) {
+        return { id: "optimizely", transport: "polling" };
+      }
     } catch (_) {
     }
     return null;
@@ -309,8 +312,228 @@
     };
   }
 
-  // src/inject/providers/posthog.ts
+  // src/inject/providers/optimizely.ts
   function create3() {
+    function isPayload(data) {
+      if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+      const d = data;
+      return Array.isArray(d["featureFlags"]) && Array.isArray(d["rollouts"]) && "revision" in d;
+    }
+    function getDefaultExperiment(rollout) {
+      if (!rollout || !Array.isArray(rollout.experiments) || rollout.experiments.length === 0) return void 0;
+      return rollout.experiments[rollout.experiments.length - 1];
+    }
+    function getRoutedVariation(experiment) {
+      if (!experiment) return void 0;
+      const alloc = experiment.trafficAllocation?.[0];
+      if (!alloc) return experiment.variations?.[0];
+      return experiment.variations.find((v) => v.id === alloc.entityId) ?? experiment.variations?.[0];
+    }
+    function parseVariableValue(type, raw) {
+      if (raw == null) return null;
+      switch (type) {
+        case "boolean":
+          return raw === "true";
+        case "integer": {
+          const n = parseInt(raw, 10);
+          return Number.isNaN(n) ? raw : n;
+        }
+        case "double": {
+          const n = parseFloat(raw);
+          return Number.isNaN(n) ? raw : n;
+        }
+        case "json":
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return raw;
+          }
+        default:
+          return raw;
+      }
+    }
+    function serializeVariableValue(value) {
+      if (typeof value === "string") return value;
+      if (typeof value === "boolean") return value ? "true" : "false";
+      if (typeof value === "number") return String(value);
+      return JSON.stringify(value);
+    }
+    return {
+      id: "optimizely",
+      isPayload,
+      applyPollingOverrides(data, overrides2) {
+        if (!isPayload(data)) return null;
+        const original = data;
+        const overrideKeys = Object.keys(overrides2);
+        const cloned = JSON.parse(JSON.stringify(original));
+        const rolloutsById = /* @__PURE__ */ new Map();
+        for (const r of cloned.rollouts) rolloutsById.set(r.id, r);
+        let mutated = false;
+        for (const flag of cloned.featureFlags) {
+          if (!(flag.key in overrides2)) continue;
+          const overrideValue = overrides2[flag.key];
+          const rollout = rolloutsById.get(flag.rolloutId);
+          const experiment = getDefaultExperiment(rollout);
+          const variation = getRoutedVariation(experiment);
+          if (!experiment || !variation) continue;
+          experiment.trafficAllocation = [{ entityId: variation.id, endOfRange: 1e4 }];
+          if (!flag.variables || flag.variables.length === 0) {
+            variation.featureEnabled = Boolean(overrideValue);
+            mutated = true;
+            continue;
+          }
+          variation.featureEnabled = typeof overrideValue === "boolean" ? overrideValue : true;
+          if (!Array.isArray(variation.variables)) variation.variables = [];
+          const flagVar = flag.variables[0];
+          if (flagVar && typeof overrideValue !== "boolean") {
+            const existing = variation.variables.find((v) => v.id === flagVar.id);
+            const serialized = serializeVariableValue(overrideValue);
+            if (existing) {
+              existing.value = serialized;
+            } else {
+              variation.variables.push({
+                id: flagVar.id,
+                value: serialized,
+                key: flagVar.key,
+                type: flagVar.type
+              });
+            }
+          }
+          mutated = true;
+        }
+        if (mutated) {
+          const currentRev = parseInt(cloned.revision || "0", 10);
+          cloned.revision = String((Number.isNaN(currentRev) ? 0 : currentRev) + 1);
+        }
+        log("Optimizely polling: %d flags, %d overrides applied", cloned.featureFlags.length, overrideKeys.length);
+        return cloned;
+      },
+      normalizeFlags(data) {
+        if (!isPayload(data)) return {};
+        const d = data;
+        const rolloutsById = /* @__PURE__ */ new Map();
+        for (const r of d.rollouts) rolloutsById.set(r.id, r);
+        const normalized = {};
+        for (const flag of d.featureFlags) {
+          const rollout = rolloutsById.get(flag.rolloutId);
+          const experiment = getDefaultExperiment(rollout);
+          const variation = getRoutedVariation(experiment);
+          if (!variation) continue;
+          const enabled = variation.featureEnabled === true;
+          if (!flag.variables || flag.variables.length === 0) {
+            normalized[flag.key] = { value: enabled };
+            continue;
+          }
+          const flagVar = flag.variables[0];
+          const variationVar = (variation.variables || []).find((v) => v.id === flagVar.id);
+          const rawValue = variationVar?.value ?? flagVar.defaultValue;
+          normalized[flag.key] = {
+            value: enabled ? parseVariableValue(flagVar.type, rawValue) : parseVariableValue(flagVar.type, flagVar.defaultValue)
+          };
+        }
+        return normalized;
+      },
+      registerListener(_type, _listener) {
+      },
+      dispatchFlagsUpdate(_flags, _overrides, notifyFn) {
+        notifyFn();
+      },
+      sseEventTypes: /* @__PURE__ */ new Set(),
+      processSSEEvent: () => null,
+      instrumentSDK(sdk, getOverrides, onFlagsUpdate) {
+        const client = sdk;
+        if (!client || typeof client !== "object") return false;
+        const captured = {};
+        function record(key, value) {
+          if (captured[key]?.value !== value || !(key in captured)) {
+            captured[key] = { value };
+            onFlagsUpdate({ ...captured });
+          }
+        }
+        if (typeof client.decide === "function") {
+          const orig = client.decide.bind(client);
+          client.decide = function(flagKey, ...args) {
+            const ovr = getOverrides();
+            if (typeof flagKey === "string" && flagKey in ovr) {
+              const v = ovr[flagKey];
+              record(flagKey, v);
+              const enabled = typeof v === "boolean" ? v : true;
+              const variables = typeof v === "boolean" ? {} : { value: v };
+              return {
+                enabled,
+                variables,
+                variationKey: enabled ? "on" : "off",
+                ruleKey: null,
+                flagKey,
+                userContext: null,
+                reasons: ["OVERRIDE"]
+              };
+            }
+            const result = orig(flagKey, ...args);
+            if (result && typeof result === "object") {
+              const decision = result;
+              const vars = decision.variables || {};
+              const firstVar = Object.values(vars)[0];
+              record(flagKey, firstVar !== void 0 ? firstVar : Boolean(decision.enabled));
+            }
+            return result;
+          };
+        }
+        if (typeof client.isFeatureEnabled === "function") {
+          const orig = client.isFeatureEnabled.bind(client);
+          client.isFeatureEnabled = function(flagKey, ...args) {
+            const ovr = getOverrides();
+            if (typeof flagKey === "string" && flagKey in ovr) {
+              const v = Boolean(ovr[flagKey]);
+              record(flagKey, v);
+              return v;
+            }
+            const value = orig(flagKey, ...args);
+            record(flagKey, value);
+            return value;
+          };
+        }
+        const variableMethods = ["getFeatureVariableBoolean", "getFeatureVariableString", "getFeatureVariableDouble", "getFeatureVariableInteger", "getFeatureVariableJSON"];
+        for (const method of variableMethods) {
+          if (typeof client[method] !== "function") continue;
+          const orig = client[method].bind(client);
+          client[method] = function(flagKey, ...args) {
+            const ovr = getOverrides();
+            if (typeof flagKey === "string" && flagKey in ovr) {
+              const v = ovr[flagKey];
+              record(flagKey, v);
+              return v;
+            }
+            const value = orig(flagKey, ...args);
+            record(flagKey, value);
+            return value;
+          };
+        }
+        if (typeof client.getAllFeatureVariables === "function") {
+          const orig = client.getAllFeatureVariables.bind(client);
+          client.getAllFeatureVariables = function(flagKey, ...args) {
+            const ovr = getOverrides();
+            if (typeof flagKey === "string" && flagKey in ovr) {
+              const v = ovr[flagKey];
+              record(flagKey, v);
+              return typeof v === "object" && v !== null ? v : { value: v };
+            }
+            const value = orig(flagKey, ...args);
+            if (value && typeof value === "object") {
+              const firstVar = Object.values(value)[0];
+              if (firstVar !== void 0) record(flagKey, firstVar);
+            }
+            return value;
+          };
+        }
+        log("Optimizely: client hooked");
+        return true;
+      }
+    };
+  }
+
+  // src/inject/providers/posthog.ts
+  function create4() {
     const SCALAR = /* @__PURE__ */ new Set(["boolean", "string", "number"]);
     function isV1Payload(data) {
       return data != null && typeof data === "object" && "featureFlags" in data && typeof data["featureFlags"] === "object";
@@ -408,20 +631,23 @@
     if (overridesReady) return Promise.resolve();
     return new Promise((resolve) => overridesReadyCallbacks.push(resolve));
   }
-  var providers = [create(), create2(), create3()];
+  var providers = [create(), create2(), create3(), create4()];
   function getProvider(id) {
     if (!id) return null;
     return providers.find((p) => p.id === id) ?? null;
   }
   function notify() {
-    window.postMessage({
-      source: SOURCE_INJECT,
-      type: MSG_FLAGS_UPDATE,
-      flags: currentFlags,
-      overrides,
-      provider: detectedProvider,
-      transport: detectedTransport
-    }, "*");
+    window.postMessage(
+      {
+        source: SOURCE_INJECT,
+        type: MSG_FLAGS_UPDATE,
+        flags: currentFlags,
+        overrides,
+        provider: detectedProvider,
+        transport: detectedTransport
+      },
+      "*"
+    );
   }
   function setDetected(id, transport) {
     if (detectedProvider === id && detectedTransport === "sse" && transport === "polling") return;
@@ -464,10 +690,7 @@
   window.fetch = async function(input, init) {
     const url = input instanceof Request ? input.url : String(input);
     const detected = detectProvider(url);
-    const [response] = await Promise.all([
-      OriginalFetch(input, init),
-      detected?.transport === "polling" ? waitForOverrides() : Promise.resolve()
-    ]);
+    const [response] = await Promise.all([OriginalFetch(input, init), detected?.transport === "polling" ? waitForOverrides() : Promise.resolve()]);
     if (!detected || detected.transport !== "polling" || !response.ok) return response;
     log("fetch: polling URL matched (%s) %s %d", detected.id, url.split("?")[0], response.status);
     try {
@@ -546,7 +769,8 @@
       if (!detectedProvider) setDetected("openfeature", "sse");
       return es;
     }
-    if (!provider) return es;
+    if (!provider)
+      return es;
     es.addEventListener = function(type, listener, options) {
       if (!provider.sseEventTypes.has(type)) {
         originalAEL(type, listener, options);
@@ -554,27 +778,31 @@
       }
       const fn = typeof listener === "function" ? listener : listener.handleEvent.bind(listener);
       provider.registerListener(type, fn);
-      originalAEL(type, (e) => {
-        try {
-          const raw = JSON.parse(e.data);
-          const result = provider.processSSEEvent(type, raw, currentFlags, overrides);
-          if (result) {
-            if (result.flags) currentFlags = result.flags;
-            if (result.flagsChanged) {
-              setDetected(detected.id, "sse");
-              log("EventSource %s: %d flags, provider=%s", type, Object.keys(currentFlags).length, detected.id);
-              notify();
+      originalAEL(
+        type,
+        (e) => {
+          try {
+            const raw = JSON.parse(e.data);
+            const result = provider.processSSEEvent(type, raw, currentFlags, overrides);
+            if (result) {
+              if (result.flags) currentFlags = result.flags;
+              if (result.flagsChanged) {
+                setDetected(detected.id, "sse");
+                log("EventSource %s: %d flags, provider=%s", type, Object.keys(currentFlags).length, detected.id);
+                notify();
+              }
+              if (result.proxyData != null) {
+                const proxied = Object.create(e, { data: { value: result.proxyData } });
+                fn(proxied);
+                return;
+              }
             }
-            if (result.proxyData != null) {
-              const proxied = Object.create(e, { data: { value: result.proxyData } });
-              fn(proxied);
-              return;
-            }
+          } catch (_) {
           }
-        } catch (_) {
-        }
-        fn(e);
-      }, options);
+          fn(e);
+        },
+        options
+      );
     };
     return es;
   }
@@ -589,11 +817,15 @@
   function tryHookOpenFeature(sdk) {
     const ofProvider = getProvider("openfeature");
     if (!ofProvider) return;
-    const success = ofProvider.instrumentSDK(sdk, () => overrides, (flags) => {
-      currentFlags = flags;
-      setDetected("openfeature", "sse");
-      notify();
-    });
+    const success = ofProvider.instrumentSDK(
+      sdk,
+      () => overrides,
+      (flags) => {
+        currentFlags = flags;
+        setDetected("openfeature", "sse");
+        notify();
+      }
+    );
     if (success) setDetected("openfeature", "sse");
   }
   (function setupOpenFeatureDetection() {
@@ -606,6 +838,33 @@
       set(sdk) {
         Object.defineProperty(window, "OpenFeature", { value: sdk, writable: true, configurable: true });
         tryHookOpenFeature(sdk);
+      }
+    });
+  })();
+  function tryHookOptimizely(sdk) {
+    const optProvider = getProvider("optimizely");
+    if (!optProvider) return;
+    const success = optProvider.instrumentSDK(
+      sdk,
+      () => overrides,
+      (flags) => {
+        currentFlags = flags;
+        setDetected("optimizely", "polling");
+        notify();
+      }
+    );
+    if (success) setDetected("optimizely", "polling");
+  }
+  (function setupOptimizelyDetection() {
+    if (typeof window.optimizelyClient !== "undefined") {
+      tryHookOptimizely(window.optimizelyClient);
+      return;
+    }
+    Object.defineProperty(window, "optimizelyClient", {
+      configurable: true,
+      set(sdk) {
+        Object.defineProperty(window, "optimizelyClient", { value: sdk, writable: true, configurable: true });
+        tryHookOptimizely(sdk);
       }
     });
   })();

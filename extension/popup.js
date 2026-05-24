@@ -20,8 +20,17 @@
     logoOnly: true
   };
 
-  // src/popup/providers/posthog.ts
+  // src/popup/providers/optimizely.ts
   var meta3 = {
+    id: "optimizely",
+    name: "Optimizely",
+    imageSrc: "assets/optimizely.svg",
+    badgeBg: "#0037FF",
+    logoOnly: false
+  };
+
+  // src/popup/providers/posthog.ts
+  var meta4 = {
     id: "posthog",
     name: "PostHog",
     imageSrc: "assets/posthog.svg",
@@ -53,7 +62,8 @@
   var PROVIDERS = {
     [meta.id]: meta,
     [meta2.id]: meta2,
-    [meta3.id]: meta3
+    [meta3.id]: meta3,
+    [meta4.id]: meta4
   };
   var TRANSPORT_ICONS = {
     polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,

@@ -1,11 +1,9 @@
 import { meta as ldMeta } from './providers/launchdarkly.js'
 import { meta as ofMeta } from './providers/openfeature.js'
+import { meta as optMeta } from './providers/optimizely.js'
 import { meta as phMeta } from './providers/posthog.js'
 import { DEMO_SITE_URL } from './demoFlags.js'
-import {
-  MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES,
-  MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_THEME, STORAGE_LAST_FEEDBACK, FORMSPREE_ENDPOINT,
-} from '../constants.js'
+import { MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES, MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_THEME, STORAGE_LAST_FEEDBACK, FORMSPREE_ENDPOINT } from '../constants.js'
 import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
 
 interface AppState {
@@ -26,12 +24,13 @@ let searchQueryKey = 'fc:searchQuery'
 const PROVIDERS: Record<string, ProviderMeta> = {
   [ldMeta.id]: ldMeta,
   [ofMeta.id]: ofMeta,
+  [optMeta.id]: optMeta,
   [phMeta.id]: phMeta,
 }
 
 const TRANSPORT_ICONS: Record<string, string> = {
   polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,
-  sse:     `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>`,
+  sse: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>`,
 }
 
 function providerBadgeHTML(provider: string, transport: string | null): string {
@@ -49,15 +48,15 @@ function providerBadgeHTML(provider: string, transport: string | null): string {
 
 function inferType(value: unknown): 'boolean' | 'number' | 'string' | 'json' {
   if (typeof value === 'boolean') return 'boolean'
-  if (typeof value === 'number')  return 'number'
-  if (typeof value === 'string')  return 'string'
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'string') return 'string'
   return 'json'
 }
 
 function formatValue(value: unknown, type: string): string {
   if (type === 'boolean') return String(value)
-  if (type === 'string')  return `"${value as string}"`
-  if (type === 'json')    return JSON.stringify(value)
+  if (type === 'string') return `"${value as string}"`
+  if (type === 'json') return JSON.stringify(value)
   return String(value)
 }
 
@@ -90,22 +89,20 @@ function clearOverride(key: string): void {
 // ── Render ────────────────────────────────────────────────────────────────
 
 function render(): void {
-  const flags     = state.flags
+  const flags = state.flags
   const overrides = state.overrides
 
   const keys = Object.keys(flags)
   const overrideCount = Object.keys(overrides).length
-  const filteredKeys = searchQuery
-    ? keys.filter(k => k.toLowerCase().includes(searchQuery.toLowerCase()))
-    : keys
+  const filteredKeys = searchQuery ? keys.filter(k => k.toLowerCase().includes(searchQuery.toLowerCase())) : keys
 
-  const emptyEl        = document.getElementById('state-empty')!
-  const flagsEl        = document.getElementById('state-flags')!
-  const badgeEl        = document.getElementById('provider-badge')!
+  const emptyEl = document.getElementById('state-empty')!
+  const flagsEl = document.getElementById('state-flags')!
+  const badgeEl = document.getElementById('provider-badge')!
   const overrideInfoEl = document.getElementById('override-info')!
-  const countEl        = document.getElementById('override-count')!
+  const countEl = document.getElementById('override-count')!
   const pollRefreshBar = document.getElementById('poll-refresh-bar')!
-  const listEl         = document.getElementById('flag-list')!
+  const listEl = document.getElementById('flag-list')!
 
   if (keys.length === 0) {
     document.body.style.height = ''
@@ -130,9 +127,7 @@ function render(): void {
   badgeEl.style.background = providerMeta?.badgeBg ?? 'var(--badge-bg)'
   badgeEl.innerHTML = providerBadgeHTML(provider, state.transport)
   const transportLabel = state.transport === 'sse' ? 'streaming' : state.transport === 'polling' ? 'polling' : null
-  badgeEl.title = transportLabel
-    ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}`
-    : `Auto-detected: ${providerMeta?.name || provider}`
+  badgeEl.title = transportLabel ? `Auto-detected: ${providerMeta?.name || provider} via ${transportLabel}` : `Auto-detected: ${providerMeta?.name || provider}`
   badgeEl.classList.remove('hidden')
 
   overrideInfoEl.classList.toggle('hidden', overrideCount === 0)
@@ -161,9 +156,7 @@ function render(): void {
 
     const row = document.createElement('div')
     row.className = 'flag-row'
-    row.title = hasOverride
-      ? `Overriding: ${formatValue(flag.value, type)}`
-      : 'Click to override'
+    row.title = hasOverride ? `Overriding: ${formatValue(flag.value, type)}` : 'Click to override'
 
     const keyEl = document.createElement('span')
     keyEl.className = 'flag-key'
@@ -214,17 +207,25 @@ function render(): void {
         const trueBtn = document.createElement('button')
         trueBtn.className = `bool-option${current === true ? ' active-true' : ''}`
         trueBtn.textContent = 'true'
-        trueBtn.addEventListener('click', (e) => {
+        trueBtn.addEventListener('click', e => {
           e.stopPropagation()
-          if (flag.value === true) { clearOverride(key) } else { applyOverride(key, true) }
+          if (flag.value === true) {
+            clearOverride(key)
+          } else {
+            applyOverride(key, true)
+          }
         })
 
         const falseBtn = document.createElement('button')
         falseBtn.className = `bool-option${current === false ? ' active-false' : ''}`
         falseBtn.textContent = 'false'
-        falseBtn.addEventListener('click', (e) => {
+        falseBtn.addEventListener('click', e => {
           e.stopPropagation()
-          if (flag.value === false) { clearOverride(key) } else { applyOverride(key, false) }
+          if (flag.value === false) {
+            clearOverride(key)
+          } else {
+            applyOverride(key, false)
+          }
         })
 
         toggleRow.appendChild(trueBtn)
@@ -234,7 +235,7 @@ function render(): void {
           const restore = document.createElement('button')
           restore.className = 'editor-restore'
           restore.textContent = 'restore'
-          restore.addEventListener('click', (e) => {
+          restore.addEventListener('click', e => {
             e.stopPropagation()
             clearOverride(key)
           })
@@ -242,7 +243,6 @@ function render(): void {
         }
 
         editor.appendChild(toggleRow)
-
       } else {
         const editorRow = document.createElement('div')
         editorRow.className = 'editor-row'
@@ -250,9 +250,7 @@ function render(): void {
         const input = document.createElement('input')
         input.className = 'editor-input'
         input.type = 'text'
-        input.value = hasOverride
-          ? (type === 'string' ? String(overrides[key]) : JSON.stringify(overrides[key]))
-          : (type === 'string' ? String(flag.value) : JSON.stringify(flag.value))
+        input.value = hasOverride ? (type === 'string' ? String(overrides[key]) : JSON.stringify(overrides[key])) : type === 'string' ? String(flag.value) : JSON.stringify(flag.value)
         input.placeholder = type === 'string' ? 'string value' : 'JSON value'
 
         const apply = () => {
@@ -270,16 +268,25 @@ function render(): void {
           }
         }
 
-        input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') { e.preventDefault(); apply() }
-          if (e.key === 'Escape') { expandedKey = null; render() }
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            apply()
+          }
+          if (e.key === 'Escape') {
+            expandedKey = null
+            render()
+          }
         })
-        input.addEventListener('click', (e) => e.stopPropagation())
+        input.addEventListener('click', e => e.stopPropagation())
 
         const applyBtn = document.createElement('button')
         applyBtn.className = 'editor-apply'
         applyBtn.textContent = 'Apply'
-        applyBtn.addEventListener('click', (e) => { e.stopPropagation(); apply() })
+        applyBtn.addEventListener('click', e => {
+          e.stopPropagation()
+          apply()
+        })
 
         editorRow.appendChild(input)
         editorRow.appendChild(applyBtn)
@@ -289,7 +296,7 @@ function render(): void {
           const restore = document.createElement('button')
           restore.className = 'editor-restore'
           restore.textContent = 'restore'
-          restore.addEventListener('click', (e) => {
+          restore.addEventListener('click', e => {
             e.stopPropagation()
             clearOverride(key)
           })
@@ -309,9 +316,9 @@ function render(): void {
 // ── Init ──────────────────────────────────────────────────────────────────
 
 function getActiveTab(callback: (tab: chrome.tabs.Tab | null, windowId?: number) => void): void {
-  chrome.windows.getLastFocused({ windowTypes: ['normal'] }, (win) => {
+  chrome.windows.getLastFocused({ windowTypes: ['normal'] }, win => {
     if (chrome.runtime.lastError || !win) return callback(null)
-    chrome.tabs.query({ active: true, windowId: win.id }, (tabs) => {
+    chrome.tabs.query({ active: true, windowId: win.id }, tabs => {
       callback(tabs[0] || null, win.id)
     })
   })
@@ -320,15 +327,15 @@ function getActiveTab(callback: (tab: chrome.tabs.Tab | null, windowId?: number)
 function reloadActiveTab(btn: HTMLElement): void {
   btn.classList.add('spinning')
   btn.addEventListener('animationend', () => btn.classList.remove('spinning'), { once: true })
-  getActiveTab((tab) => {
+  getActiveTab(tab => {
     if (tab?.id != null) chrome.tabs.reload(tab.id)
   })
 }
 
 const searchToggle = document.getElementById('search-toggle')!
-const searchBar    = document.getElementById('search-bar')!
-const searchInput  = document.getElementById('search-input') as HTMLInputElement
-const searchClear  = document.getElementById('search-clear')!
+const searchBar = document.getElementById('search-bar')!
+const searchInput = document.getElementById('search-input') as HTMLInputElement
+const searchClear = document.getElementById('search-clear')!
 
 function applySearchOpen(): void {
   searchToggle.classList.toggle('active', searchOpen)
@@ -381,8 +388,7 @@ document.getElementById('clear-all-btn')!.addEventListener('click', () => {
 
 // ── Settings ──────────────────────────────────────────────────────────────
 
-document.getElementById('settings-version')!.textContent =
-  chrome.runtime.getManifest().version
+document.getElementById('settings-version')!.textContent = chrome.runtime.getManifest().version
 
 function updateSettingsButtons(): void {
   const isDark = document.body.classList.contains('dark')
@@ -441,8 +447,7 @@ let feedbackChallenge = { a: 0, b: 0 }
 function genChallenge(): void {
   feedbackChallenge.a = Math.floor(Math.random() * 9) + 1
   feedbackChallenge.b = Math.floor(Math.random() * 9) + 1
-  document.getElementById('feedback-challenge-label')!.textContent =
-    `What is ${feedbackChallenge.a} + ${feedbackChallenge.b}?`
+  document.getElementById('feedback-challenge-label')!.textContent = `What is ${feedbackChallenge.a} + ${feedbackChallenge.b}?`
   ;(document.getElementById('feedback-captcha-input') as HTMLInputElement).value = ''
 }
 
@@ -458,7 +463,7 @@ function openFeedbackView(): void {
   ;(document.getElementById('feedback-textarea') as HTMLTextAreaElement).value = ''
   document.getElementById('feedback-char-count')!.textContent = '0 / 200'
 
-  chrome.storage.local.get([STORAGE_LAST_FEEDBACK], (result) => {
+  chrome.storage.local.get([STORAGE_LAST_FEEDBACK], result => {
     const last = result[STORAGE_LAST_FEEDBACK] as number | undefined
     const limited = last != null && Date.now() - last < FEEDBACK_COOLDOWN_MS
     document.getElementById('feedback-ratelimit')!.classList.toggle('hidden', !limited)
@@ -493,7 +498,7 @@ function verifyChallenge(): void {
 document.getElementById('feedback-verify-btn')!.addEventListener('click', verifyChallenge)
 document.getElementById('feedback-cancel-btn')!.addEventListener('click', closeFeedbackView)
 
-document.getElementById('feedback-captcha-input')!.addEventListener('keydown', (e) => {
+document.getElementById('feedback-captcha-input')!.addEventListener('keydown', e => {
   if ((e as KeyboardEvent).key === 'Enter') verifyChallenge()
 })
 
@@ -569,15 +574,15 @@ getActiveTab((tab, windowId) => {
   }
   let flagsResponse: AppState | undefined
   let storageReady = false
-  let flagsReady   = false
+  let flagsReady = false
 
   function maybeRender(): void {
     if (!storageReady || !flagsReady) return
     if (flagsResponse) {
       state = {
-        flags:     flagsResponse.flags     ?? {},
+        flags: flagsResponse.flags ?? {},
         overrides: flagsResponse.overrides ?? {},
-        provider:  flagsResponse.provider  ?? null,
+        provider: flagsResponse.provider ?? null,
         transport: flagsResponse.transport ?? null,
       }
     }
@@ -586,8 +591,8 @@ getActiveTab((tab, windowId) => {
     if (searchOpen) searchInput.focus()
   }
 
-  chrome.storage.local.get([searchStateKey, searchQueryKey, STORAGE_THEME], (result) => {
-    searchOpen  = result[searchStateKey] === true
+  chrome.storage.local.get([searchStateKey, searchQueryKey, STORAGE_THEME], result => {
+    searchOpen = result[searchStateKey] === true
     searchQuery = (result[searchQueryKey] as string) || ''
     if (result[STORAGE_THEME] === 'dark') document.body.classList.add('dark')
     storageReady = true
