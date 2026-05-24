@@ -30,12 +30,12 @@ At my last job we had 100+ flags across 5 environments with 40 engineers and QA 
 |---|---|---|
 | OpenFeature / OFREP | Streaming + Polling | Any OFREP-compliant provider works automatically |
 | LaunchDarkly | Streaming + Polling | Native SDK and OpenFeature adapter both supported |
+| Optimizely | Polling | Feature Experimentation (v6+); both datafile rewrite and SDK patch (`window.optimizelyClient`) |
 | PostHog | Polling | Boolean, string, and number flags; PostHog Cloud only |
 
 ## Future Providers
 
 - Statsig
-- Optimizely
 - Split / Harness
 - Unleash
 - GrowthBook
