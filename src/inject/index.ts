@@ -111,21 +111,30 @@ window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Pr
   try {
     const data: unknown = await response.clone().json()
     const provider = getProvider(detected.id)
-    if (provider) {
-      const modified = provider.applyPollingOverrides(data, overrides)
-      if (modified) {
-        currentFlags = provider.normalizeFlags(data)
-        log('fetch: flag payload ✓, %d flags', Object.keys(currentFlags).length)
-        setDetected(detected.id, 'polling')
-        notify()
-        return new Response(JSON.stringify(modified), {
-          status: response.status,
-          statusText: response.statusText,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      }
+    if (!provider || !provider.isPayload(data)) {
+      log('fetch: not a flag payload — response shape unexpected')
+      return response
     }
-    log('fetch: not a flag payload — response shape unexpected')
+
+    // Always observe — popup needs to see flags even with no overrides.
+    currentFlags = provider.normalizeFlags(data)
+    log('fetch: flag payload ✓, %d flags', Object.keys(currentFlags).length)
+    setDetected(detected.id, 'polling')
+    notify()
+
+    // Only rewrite when there are overrides to apply. Untouched response avoids
+    // breaking SDKs that validate headers/body bytes (e.g. Optimizely v6).
+    if (Object.keys(overrides).length === 0) return response
+
+    const modified = provider.applyPollingOverrides(data, overrides)
+    if (!modified) return response
+
+    const headers = new Headers(response.headers)
+    headers.set('Content-Type', 'application/json')
+    headers.delete('Content-Length')
+    headers.delete('ETag')
+    headers.delete('Last-Modified')
+    return new Response(JSON.stringify(modified), { status: response.status, statusText: response.statusText, headers })
   } catch (err) {
     log('fetch: parse error %o', err)
   }
@@ -155,12 +164,21 @@ function CustomXHR(): XMLHttpRequest {
     try {
       const data: unknown = JSON.parse(xhr.responseText)
       const provider = getProvider(detected.id)
-      if (!provider) return
-      const modified = provider.applyPollingOverrides(data, overrides)
-      if (!modified) return
+      if (!provider || !provider.isPayload(data)) return
+
+      // Always observe so the popup shows the current flag values.
       currentFlags = provider.normalizeFlags(data)
       log('XHR: flag payload ✓, %d flags', Object.keys(currentFlags).length)
       setDetected(detected.id, 'polling')
+      notify()
+
+      // No overrides → leave the response untouched. Patching responseText for
+      // a SDK that strictly validates response body bytes/headers (Optimizely
+      // v6) was causing onReady to never resolve.
+      if (Object.keys(overrides).length === 0) return
+
+      const modified = provider.applyPollingOverrides(data, overrides)
+      if (!modified) return
       const modifiedJson = JSON.stringify(modified)
       Object.defineProperty(xhr, 'responseText', { get: () => modifiedJson, configurable: true })
       Object.defineProperty(xhr, 'response', {
@@ -170,7 +188,6 @@ function CustomXHR(): XMLHttpRequest {
         configurable: true,
       })
       log('XHR: patched responseText')
-      notify()
     } catch (err) {
       log('XHR: error %o', err)
     }
@@ -181,6 +198,16 @@ function CustomXHR(): XMLHttpRequest {
 
 window.XMLHttpRequest = CustomXHR as unknown as typeof XMLHttpRequest
 window.XMLHttpRequest.prototype = OriginalXHR.prototype
+// Static readystate constants. Omitting these makes `XMLHttpRequest.DONE` undefined,
+// which breaks SDKs that compare `request.readyState === XMLHttpRequest.DONE` (e.g.
+// Optimizely v6) — the comparison is always false so the response is never processed.
+Object.assign(window.XMLHttpRequest, {
+  UNSENT: OriginalXHR.UNSENT,
+  OPENED: OriginalXHR.OPENED,
+  HEADERS_RECEIVED: OriginalXHR.HEADERS_RECEIVED,
+  LOADING: OriginalXHR.LOADING,
+  DONE: OriginalXHR.DONE,
+})
 
 // ── EventSource interceptor (SSE) ─────────────────────────────────────────
 
@@ -294,7 +321,10 @@ function tryHookOptimizely(sdk: unknown): void {
     sdk,
     () => overrides,
     (flags: FlagsMap) => {
-      currentFlags = flags
+      // Merge into currentFlags rather than replace — the polling/XHR path already
+      // populated all 14 flags from the datafile; SDK-patch fills in only flags the
+      // page actually evaluated, so a replace would clobber the rest.
+      currentFlags = { ...currentFlags, ...flags }
       setDetected('optimizely', 'polling')
       notify()
     },

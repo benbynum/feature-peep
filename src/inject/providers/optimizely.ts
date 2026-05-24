@@ -118,38 +118,35 @@ export function create() {
         const overrideValue = overrides[flag.key]
         const rollout = rolloutsById.get(flag.rolloutId)
         const experiment = getDefaultExperiment(rollout)
-        const variation = getRoutedVariation(experiment)
-        if (!experiment || !variation) continue
+        if (!experiment || !Array.isArray(experiment.variations) || experiment.variations.length === 0) continue
 
-        // Force 100% traffic to this variation.
-        experiment.trafficAllocation = [{ entityId: variation.id, endOfRange: 10000 }]
-
-        // Boolean-only flag (no variables): toggle featureEnabled.
-        if (!flag.variables || flag.variables.length === 0) {
-          variation.featureEnabled = Boolean(overrideValue)
-          mutated = true
-          continue
+        // Pick the variation whose featureEnabled matches the override's intent. Optimizely
+        // auto-creates both `on` and `off` variations, so this normally finds the matching one
+        // without us having to mutate a variation's featureEnabled flag (which can produce a
+        // semantically inconsistent datafile — e.g. a variation keyed `off` with
+        // featureEnabled=true — that the SDK may reject on validation).
+        const desiredEnabled = typeof overrideValue === 'boolean' ? overrideValue : true
+        let target = experiment.variations.find(v => v.featureEnabled === desiredEnabled)
+        if (!target) {
+          // Fallback: mutate the currently-routed variation. Only hit when both auto-variations
+          // are missing (custom datafile shape).
+          target = getRoutedVariation(experiment) ?? experiment.variations[0]
+          target.featureEnabled = desiredEnabled
         }
+        experiment.trafficAllocation = [{ entityId: target.id, endOfRange: 10000 }]
 
-        // Flag with variables: featureEnabled stays true so variables are returned;
-        // override the first variable's value. If the override is itself a boolean,
-        // also flip featureEnabled so callers using isFeatureEnabled see the change.
-        variation.featureEnabled = typeof overrideValue === 'boolean' ? overrideValue : true
-
-        if (!Array.isArray(variation.variables)) variation.variables = []
-        const flagVar = flag.variables[0]
-        if (flagVar && typeof overrideValue !== 'boolean') {
-          const existing = variation.variables.find(v => v.id === flagVar.id)
-          const serialized = serializeVariableValue(overrideValue)
-          if (existing) {
-            existing.value = serialized
-          } else {
-            variation.variables.push({
-              id: flagVar.id,
-              value: serialized,
-              key: flagVar.key,
-              type: flagVar.type,
-            })
+        // Variable overrides: mutate the chosen variation's variable value.
+        if (flag.variables && flag.variables.length > 0 && typeof overrideValue !== 'boolean') {
+          if (!Array.isArray(target.variables)) target.variables = []
+          const flagVar = flag.variables[0]
+          if (flagVar) {
+            const existing = target.variables.find(v => v.id === flagVar.id)
+            const serialized = serializeVariableValue(overrideValue)
+            if (existing) {
+              existing.value = serialized
+            } else {
+              target.variables.push({ id: flagVar.id, value: serialized, key: flagVar.key, type: flagVar.type })
+            }
           }
         }
         mutated = true
@@ -206,60 +203,87 @@ export function create() {
       const client = sdk as any
       if (!client || typeof client !== 'object') return false
 
+      // Per-flag natural values observed from the SDK. Only the SDK's real values
+      // go in here — override values are deliberately NOT recorded, so the popup
+      // continues to see the underlying SDK truth even while overrides are active.
       const captured: FlagsMap = {}
 
-      function record(key: string, value: unknown): void {
+      function recordNatural(key: string, value: unknown): void {
         if (captured[key]?.value !== value || !(key in captured)) {
           captured[key] = { value }
           onFlagsUpdate({ ...captured })
         }
       }
 
-      // decide(flagKey, options?) → { enabled, variables, variationKey, ... }
-      if (typeof client.decide === 'function') {
-        const orig = client.decide.bind(client)
-        client.decide = function (flagKey: string, ...args: unknown[]) {
+      function buildOverrideDecision(flagKey: string, v: unknown): Record<string, unknown> {
+        const enabled = typeof v === 'boolean' ? v : true
+        const variables = typeof v === 'boolean' ? {} : { value: v }
+        return { enabled, variables, variationKey: enabled ? 'on' : 'off', ruleKey: null, flagKey, userContext: null, reasons: ['OVERRIDE'] }
+      }
+
+      function wrapDecide(target: any, methodName: string): void {
+        if (typeof target[methodName] !== 'function') return
+        const orig = target[methodName].bind(target)
+        target[methodName] = function (flagKey: string, ...args: unknown[]) {
           const ovr = getOverrides()
           if (typeof flagKey === 'string' && flagKey in ovr) {
-            const v = ovr[flagKey]
-            record(flagKey, v)
-            const enabled = typeof v === 'boolean' ? v : true
-            const variables = typeof v === 'boolean' ? {} : { value: v }
-            return {
-              enabled,
-              variables,
-              variationKey: enabled ? 'on' : 'off',
-              ruleKey: null,
-              flagKey,
-              userContext: null,
-              reasons: ['OVERRIDE'],
-            }
+            return buildOverrideDecision(flagKey, ovr[flagKey])
           }
           const result = orig(flagKey, ...args)
           if (result && typeof result === 'object') {
-            const decision = result as {
-              enabled?: unknown
-              variables?: Record<string, unknown>
-            }
+            const decision = result as { enabled?: unknown; variables?: Record<string, unknown> }
             const vars = decision.variables || {}
             const firstVar = Object.values(vars)[0]
-            record(flagKey, firstVar !== undefined ? firstVar : Boolean(decision.enabled))
+            recordNatural(flagKey, firstVar !== undefined ? firstVar : Boolean(decision.enabled))
           }
           return result
         }
       }
 
+      // v6 user-context API — what most modern code (including Meridian) uses.
+      if (typeof client.createUserContext === 'function') {
+        const origCreate = client.createUserContext.bind(client)
+        client.createUserContext = function (...args: unknown[]) {
+          const ctx = origCreate(...args)
+          if (ctx && typeof ctx === 'object') {
+            wrapDecide(ctx, 'decide')
+            // decideForKeys/decideAll return objects keyed by flagKey
+            for (const m of ['decideForKeys', 'decideAll'] as const) {
+              if (typeof ctx[m] !== 'function') continue
+              const orig = ctx[m].bind(ctx)
+              ctx[m] = function (...innerArgs: unknown[]) {
+                const result = orig(...innerArgs) as Record<string, { enabled?: unknown; variables?: Record<string, unknown> }>
+                const ovr = getOverrides()
+                if (!result || typeof result !== 'object') return result
+                const out: Record<string, unknown> = {}
+                for (const [flagKey, decision] of Object.entries(result)) {
+                  if (flagKey in ovr) {
+                    out[flagKey] = buildOverrideDecision(flagKey, ovr[flagKey])
+                  } else {
+                    const vars = decision.variables || {}
+                    const firstVar = Object.values(vars)[0]
+                    recordNatural(flagKey, firstVar !== undefined ? firstVar : Boolean(decision.enabled))
+                    out[flagKey] = decision
+                  }
+                }
+                return out
+              }
+            }
+          }
+          return ctx
+        }
+      }
+
+      // Legacy client-level decide (some setups still use it).
+      wrapDecide(client, 'decide')
+
       if (typeof client.isFeatureEnabled === 'function') {
         const orig = client.isFeatureEnabled.bind(client)
         client.isFeatureEnabled = function (flagKey: string, ...args: unknown[]) {
           const ovr = getOverrides()
-          if (typeof flagKey === 'string' && flagKey in ovr) {
-            const v = Boolean(ovr[flagKey])
-            record(flagKey, v)
-            return v
-          }
+          if (typeof flagKey === 'string' && flagKey in ovr) return Boolean(ovr[flagKey])
           const value = orig(flagKey, ...args)
-          record(flagKey, value)
+          recordNatural(flagKey, value)
           return value
         }
       }
@@ -270,13 +294,9 @@ export function create() {
         const orig = client[method].bind(client)
         client[method] = function (flagKey: string, ...args: unknown[]) {
           const ovr = getOverrides()
-          if (typeof flagKey === 'string' && flagKey in ovr) {
-            const v = ovr[flagKey]
-            record(flagKey, v)
-            return v
-          }
+          if (typeof flagKey === 'string' && flagKey in ovr) return ovr[flagKey]
           const value = orig(flagKey, ...args)
-          record(flagKey, value)
+          recordNatural(flagKey, value)
           return value
         }
       }
@@ -287,13 +307,12 @@ export function create() {
           const ovr = getOverrides()
           if (typeof flagKey === 'string' && flagKey in ovr) {
             const v = ovr[flagKey]
-            record(flagKey, v)
             return typeof v === 'object' && v !== null ? v : { value: v }
           }
           const value = orig(flagKey, ...args)
           if (value && typeof value === 'object') {
             const firstVar = Object.values(value as Record<string, unknown>)[0]
-            if (firstVar !== undefined) record(flagKey, firstVar)
+            if (firstVar !== undefined) recordNatural(flagKey, firstVar)
           }
           return value
         }

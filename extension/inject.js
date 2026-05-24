@@ -374,29 +374,25 @@
           const overrideValue = overrides2[flag.key];
           const rollout = rolloutsById.get(flag.rolloutId);
           const experiment = getDefaultExperiment(rollout);
-          const variation = getRoutedVariation(experiment);
-          if (!experiment || !variation) continue;
-          experiment.trafficAllocation = [{ entityId: variation.id, endOfRange: 1e4 }];
-          if (!flag.variables || flag.variables.length === 0) {
-            variation.featureEnabled = Boolean(overrideValue);
-            mutated = true;
-            continue;
+          if (!experiment || !Array.isArray(experiment.variations) || experiment.variations.length === 0) continue;
+          const desiredEnabled = typeof overrideValue === "boolean" ? overrideValue : true;
+          let target = experiment.variations.find((v) => v.featureEnabled === desiredEnabled);
+          if (!target) {
+            target = getRoutedVariation(experiment) ?? experiment.variations[0];
+            target.featureEnabled = desiredEnabled;
           }
-          variation.featureEnabled = typeof overrideValue === "boolean" ? overrideValue : true;
-          if (!Array.isArray(variation.variables)) variation.variables = [];
-          const flagVar = flag.variables[0];
-          if (flagVar && typeof overrideValue !== "boolean") {
-            const existing = variation.variables.find((v) => v.id === flagVar.id);
-            const serialized = serializeVariableValue(overrideValue);
-            if (existing) {
-              existing.value = serialized;
-            } else {
-              variation.variables.push({
-                id: flagVar.id,
-                value: serialized,
-                key: flagVar.key,
-                type: flagVar.type
-              });
+          experiment.trafficAllocation = [{ entityId: target.id, endOfRange: 1e4 }];
+          if (flag.variables && flag.variables.length > 0 && typeof overrideValue !== "boolean") {
+            if (!Array.isArray(target.variables)) target.variables = [];
+            const flagVar = flag.variables[0];
+            if (flagVar) {
+              const existing = target.variables.find((v) => v.id === flagVar.id);
+              const serialized = serializeVariableValue(overrideValue);
+              if (existing) {
+                existing.value = serialized;
+              } else {
+                target.variables.push({ id: flagVar.id, value: serialized, key: flagVar.key, type: flagVar.type });
+              }
             }
           }
           mutated = true;
@@ -444,52 +440,74 @@
         const client = sdk;
         if (!client || typeof client !== "object") return false;
         const captured = {};
-        function record(key, value) {
+        function recordNatural(key, value) {
           if (captured[key]?.value !== value || !(key in captured)) {
             captured[key] = { value };
             onFlagsUpdate({ ...captured });
           }
         }
-        if (typeof client.decide === "function") {
-          const orig = client.decide.bind(client);
-          client.decide = function(flagKey, ...args) {
+        function buildOverrideDecision(flagKey, v) {
+          const enabled = typeof v === "boolean" ? v : true;
+          const variables = typeof v === "boolean" ? {} : { value: v };
+          return { enabled, variables, variationKey: enabled ? "on" : "off", ruleKey: null, flagKey, userContext: null, reasons: ["OVERRIDE"] };
+        }
+        function wrapDecide(target, methodName) {
+          if (typeof target[methodName] !== "function") return;
+          const orig = target[methodName].bind(target);
+          target[methodName] = function(flagKey, ...args) {
             const ovr = getOverrides();
             if (typeof flagKey === "string" && flagKey in ovr) {
-              const v = ovr[flagKey];
-              record(flagKey, v);
-              const enabled = typeof v === "boolean" ? v : true;
-              const variables = typeof v === "boolean" ? {} : { value: v };
-              return {
-                enabled,
-                variables,
-                variationKey: enabled ? "on" : "off",
-                ruleKey: null,
-                flagKey,
-                userContext: null,
-                reasons: ["OVERRIDE"]
-              };
+              return buildOverrideDecision(flagKey, ovr[flagKey]);
             }
             const result = orig(flagKey, ...args);
             if (result && typeof result === "object") {
               const decision = result;
               const vars = decision.variables || {};
               const firstVar = Object.values(vars)[0];
-              record(flagKey, firstVar !== void 0 ? firstVar : Boolean(decision.enabled));
+              recordNatural(flagKey, firstVar !== void 0 ? firstVar : Boolean(decision.enabled));
             }
             return result;
           };
         }
+        if (typeof client.createUserContext === "function") {
+          const origCreate = client.createUserContext.bind(client);
+          client.createUserContext = function(...args) {
+            const ctx = origCreate(...args);
+            if (ctx && typeof ctx === "object") {
+              wrapDecide(ctx, "decide");
+              for (const m of ["decideForKeys", "decideAll"]) {
+                if (typeof ctx[m] !== "function") continue;
+                const orig = ctx[m].bind(ctx);
+                ctx[m] = function(...innerArgs) {
+                  const result = orig(...innerArgs);
+                  const ovr = getOverrides();
+                  if (!result || typeof result !== "object") return result;
+                  const out = {};
+                  for (const [flagKey, decision] of Object.entries(result)) {
+                    if (flagKey in ovr) {
+                      out[flagKey] = buildOverrideDecision(flagKey, ovr[flagKey]);
+                    } else {
+                      const vars = decision.variables || {};
+                      const firstVar = Object.values(vars)[0];
+                      recordNatural(flagKey, firstVar !== void 0 ? firstVar : Boolean(decision.enabled));
+                      out[flagKey] = decision;
+                    }
+                  }
+                  return out;
+                };
+              }
+            }
+            return ctx;
+          };
+        }
+        wrapDecide(client, "decide");
         if (typeof client.isFeatureEnabled === "function") {
           const orig = client.isFeatureEnabled.bind(client);
           client.isFeatureEnabled = function(flagKey, ...args) {
             const ovr = getOverrides();
-            if (typeof flagKey === "string" && flagKey in ovr) {
-              const v = Boolean(ovr[flagKey]);
-              record(flagKey, v);
-              return v;
-            }
+            if (typeof flagKey === "string" && flagKey in ovr) return Boolean(ovr[flagKey]);
             const value = orig(flagKey, ...args);
-            record(flagKey, value);
+            recordNatural(flagKey, value);
             return value;
           };
         }
@@ -499,13 +517,9 @@
           const orig = client[method].bind(client);
           client[method] = function(flagKey, ...args) {
             const ovr = getOverrides();
-            if (typeof flagKey === "string" && flagKey in ovr) {
-              const v = ovr[flagKey];
-              record(flagKey, v);
-              return v;
-            }
+            if (typeof flagKey === "string" && flagKey in ovr) return ovr[flagKey];
             const value = orig(flagKey, ...args);
-            record(flagKey, value);
+            recordNatural(flagKey, value);
             return value;
           };
         }
@@ -515,13 +529,12 @@
             const ovr = getOverrides();
             if (typeof flagKey === "string" && flagKey in ovr) {
               const v = ovr[flagKey];
-              record(flagKey, v);
               return typeof v === "object" && v !== null ? v : { value: v };
             }
             const value = orig(flagKey, ...args);
             if (value && typeof value === "object") {
               const firstVar = Object.values(value)[0];
-              if (firstVar !== void 0) record(flagKey, firstVar);
+              if (firstVar !== void 0) recordNatural(flagKey, firstVar);
             }
             return value;
           };
@@ -696,21 +709,23 @@
     try {
       const data = await response.clone().json();
       const provider = getProvider(detected.id);
-      if (provider) {
-        const modified = provider.applyPollingOverrides(data, overrides);
-        if (modified) {
-          currentFlags = provider.normalizeFlags(data);
-          log("fetch: flag payload \u2713, %d flags", Object.keys(currentFlags).length);
-          setDetected(detected.id, "polling");
-          notify();
-          return new Response(JSON.stringify(modified), {
-            status: response.status,
-            statusText: response.statusText,
-            headers: { "Content-Type": "application/json" }
-          });
-        }
+      if (!provider || !provider.isPayload(data)) {
+        log("fetch: not a flag payload \u2014 response shape unexpected");
+        return response;
       }
-      log("fetch: not a flag payload \u2014 response shape unexpected");
+      currentFlags = provider.normalizeFlags(data);
+      log("fetch: flag payload \u2713, %d flags", Object.keys(currentFlags).length);
+      setDetected(detected.id, "polling");
+      notify();
+      if (Object.keys(overrides).length === 0) return response;
+      const modified = provider.applyPollingOverrides(data, overrides);
+      if (!modified) return response;
+      const headers = new Headers(response.headers);
+      headers.set("Content-Type", "application/json");
+      headers.delete("Content-Length");
+      headers.delete("ETag");
+      headers.delete("Last-Modified");
+      return new Response(JSON.stringify(modified), { status: response.status, statusText: response.statusText, headers });
     } catch (err) {
       log("fetch: parse error %o", err);
     }
@@ -732,12 +747,14 @@
       try {
         const data = JSON.parse(xhr.responseText);
         const provider = getProvider(detected.id);
-        if (!provider) return;
-        const modified = provider.applyPollingOverrides(data, overrides);
-        if (!modified) return;
+        if (!provider || !provider.isPayload(data)) return;
         currentFlags = provider.normalizeFlags(data);
         log("XHR: flag payload \u2713, %d flags", Object.keys(currentFlags).length);
         setDetected(detected.id, "polling");
+        notify();
+        if (Object.keys(overrides).length === 0) return;
+        const modified = provider.applyPollingOverrides(data, overrides);
+        if (!modified) return;
         const modifiedJson = JSON.stringify(modified);
         Object.defineProperty(xhr, "responseText", { get: () => modifiedJson, configurable: true });
         Object.defineProperty(xhr, "response", {
@@ -747,7 +764,6 @@
           configurable: true
         });
         log("XHR: patched responseText");
-        notify();
       } catch (err) {
         log("XHR: error %o", err);
       }
@@ -756,6 +772,13 @@
   }
   window.XMLHttpRequest = CustomXHR;
   window.XMLHttpRequest.prototype = OriginalXHR.prototype;
+  Object.assign(window.XMLHttpRequest, {
+    UNSENT: OriginalXHR.UNSENT,
+    OPENED: OriginalXHR.OPENED,
+    HEADERS_RECEIVED: OriginalXHR.HEADERS_RECEIVED,
+    LOADING: OriginalXHR.LOADING,
+    DONE: OriginalXHR.DONE
+  });
   var OriginalEventSource = window.EventSource;
   function CustomEventSource(url, init) {
     const urlStr = typeof url === "string" ? url : String(url);
@@ -848,7 +871,7 @@
       sdk,
       () => overrides,
       (flags) => {
-        currentFlags = flags;
+        currentFlags = { ...currentFlags, ...flags };
         setDetected("optimizely", "polling");
         notify();
       }
