@@ -30,6 +30,10 @@ export function detectProvider(url: string): DetectedProvider | null {
     if (host === 'cdn.optimizely.com' && /^\/datafiles\/[A-Za-z0-9_-]+\.json$/.test(path)) {
       return { id: 'optimizely', transport: 'polling' }
     }
+    // Self-hosted, so no fixed host — same URL serves polling and SSE (server picks by Accept header).
+    if (/\/internal\/v1\/evaluation\/snapshot\/namespace\//.test(path)) {
+      return { id: 'flipt', transport: 'polling' }
+    }
   } catch (_) {}
   return null
 }

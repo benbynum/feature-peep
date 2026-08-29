@@ -32,6 +32,7 @@ At my last job we had 100+ flags across 5 environments with 40 engineers and QA 
 | LaunchDarkly | Streaming + Polling | Native SDK and OpenFeature adapter both supported |
 | Optimizely | Polling | Feature Experimentation (v6+); both datafile rewrite and SDK patch (`window.optimizelyClient`) |
 | PostHog | Polling | Boolean, string, and number flags; PostHog Cloud only |
+| Flipt | Polling | Boolean flags only — variant flags aren't evaluated client-side yet |
 
 ## Future Providers
 

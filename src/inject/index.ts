@@ -4,6 +4,7 @@ import { create as createLaunchDarkly } from './providers/launchdarkly.js'
 import { create as createOpenFeature } from './providers/openfeature.js'
 import { create as createOptimizely } from './providers/optimizely.js'
 import { create as createPostHog } from './providers/posthog.js'
+import { create as createFlipt } from './providers/flipt.js'
 import { SOURCE_INJECT, SOURCE_CONTENT, MSG_FLAGS_UPDATE, MSG_REQUEST_OVERRIDES, MSG_INIT_OVERRIDES, MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES } from '../constants.js'
 import type { FlagsMap, Overrides, Provider, ProviderId, Transport } from '../types.js'
 
@@ -26,7 +27,7 @@ function waitForOverrides(): Promise<void> {
   return new Promise(resolve => overridesReadyCallbacks.push(resolve))
 }
 
-const providers: Provider[] = [createLaunchDarkly(), createOpenFeature(), createOptimizely(), createPostHog()]
+const providers: Provider[] = [createLaunchDarkly(), createOpenFeature(), createOptimizely(), createPostHog(), createFlipt()]
 
 function getProvider(id: ProviderId | null): Provider | null {
   if (!id) return null
@@ -228,10 +229,9 @@ function CustomEventSource(url: string | URL, init?: EventSourceInit): EventSour
     return es
   }
 
-  if (!provider)
-    return es
+  if (!provider) return es
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(es as any).addEventListener = function (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
     if (!provider.sseEventTypes.has(type)) {
       originalAEL(type, listener, options)

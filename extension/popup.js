@@ -38,6 +38,15 @@
     logoOnly: false
   };
 
+  // src/popup/providers/flipt.ts
+  var meta5 = {
+    id: "flipt",
+    name: "Flipt",
+    imageSrc: "assets/flipt.png",
+    badgeBg: "#7C3AED",
+    logoOnly: false
+  };
+
   // src/popup/demoFlags.ts
   var DEMO_SITE_URL = "https://featurepeep.com";
 
@@ -63,7 +72,8 @@
     [meta.id]: meta,
     [meta2.id]: meta2,
     [meta3.id]: meta3,
-    [meta4.id]: meta4
+    [meta4.id]: meta4,
+    [meta5.id]: meta5
   };
   var TRANSPORT_ICONS = {
     polling: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="transport-icon"><path d="M5 2h14v4l-7 6 7 6v4H5v-4l7-6-7-6V2z"/></svg>`,

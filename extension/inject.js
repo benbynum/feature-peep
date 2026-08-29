@@ -33,6 +33,9 @@
       if (host === "cdn.optimizely.com" && /^\/datafiles\/[A-Za-z0-9_-]+\.json$/.test(path)) {
         return { id: "optimizely", transport: "polling" };
       }
+      if (/\/internal\/v1\/evaluation\/snapshot\/namespace\//.test(path)) {
+        return { id: "flipt", transport: "polling" };
+      }
     } catch (_) {
     }
     return null;
@@ -623,6 +626,53 @@
     };
   }
 
+  // src/inject/providers/flipt.ts
+  function create5() {
+    function isPayload(data) {
+      if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+      const d = data;
+      if (!Array.isArray(d["flags"])) return false;
+      const ns = d["namespace"];
+      return ns != null && typeof ns === "object" && "key" in ns;
+    }
+    return {
+      id: "flipt",
+      isPayload,
+      // Variant flags require replicating Flipt's segment-matching + rollout engine to know the
+      // evaluated value — not attempted yet, so only boolean flags (a plain `enabled` field) are
+      // observed/overridable. Variant flags are silently omitted rather than shown with a guess.
+      applyPollingOverrides(data, overrides2) {
+        if (!isPayload(data)) return null;
+        const cloned = JSON.parse(JSON.stringify(data));
+        for (const flag of cloned.flags) {
+          if (flag.type !== "BOOLEAN_FLAG_TYPE") continue;
+          if (!(flag.key in overrides2)) continue;
+          const override = overrides2[flag.key];
+          if (typeof override !== "boolean") continue;
+          flag.enabled = override;
+        }
+        log("Flipt polling: %d flags", cloned.flags.length);
+        return cloned;
+      },
+      normalizeFlags(data) {
+        if (!isPayload(data)) return {};
+        const d = data;
+        const normalized = {};
+        for (const flag of d.flags) {
+          if (flag.type === "BOOLEAN_FLAG_TYPE") normalized[flag.key] = { value: flag.enabled };
+        }
+        return normalized;
+      },
+      registerListener(_type, _listener) {
+      },
+      dispatchFlagsUpdate(_flags, _overrides, notifyFn) {
+        notifyFn();
+      },
+      sseEventTypes: /* @__PURE__ */ new Set(),
+      processSSEEvent: () => null
+    };
+  }
+
   // src/constants.ts
   var SOURCE_INJECT = "fc-inject";
   var SOURCE_CONTENT = "fc-content";
@@ -644,7 +694,7 @@
     if (overridesReady) return Promise.resolve();
     return new Promise((resolve) => overridesReadyCallbacks.push(resolve));
   }
-  var providers = [create(), create2(), create3(), create4()];
+  var providers = [create(), create2(), create3(), create4(), create5()];
   function getProvider(id) {
     if (!id) return null;
     return providers.find((p) => p.id === id) ?? null;
@@ -792,8 +842,7 @@
       if (!detectedProvider) setDetected("openfeature", "sse");
       return es;
     }
-    if (!provider)
-      return es;
+    if (!provider) return es;
     es.addEventListener = function(type, listener, options) {
       if (!provider.sseEventTypes.has(type)) {
         originalAEL(type, listener, options);

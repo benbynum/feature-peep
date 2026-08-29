@@ -2,6 +2,7 @@ import { meta as ldMeta } from './providers/launchdarkly.js'
 import { meta as ofMeta } from './providers/openfeature.js'
 import { meta as optMeta } from './providers/optimizely.js'
 import { meta as phMeta } from './providers/posthog.js'
+import { meta as fliptMeta } from './providers/flipt.js'
 import { DEMO_SITE_URL } from './demoFlags.js'
 import { MSG_SET_OVERRIDE, MSG_CLEAR_OVERRIDE, MSG_CLEAR_ALL_OVERRIDES, MSG_FLAGS_UPDATE, MSG_GET_FLAGS, STORAGE_THEME, STORAGE_LAST_FEEDBACK, FORMSPREE_ENDPOINT } from '../constants.js'
 import type { FlagsMap, Overrides, ProviderMeta } from '../types.js'
@@ -26,6 +27,7 @@ const PROVIDERS: Record<string, ProviderMeta> = {
   [ofMeta.id]: ofMeta,
   [optMeta.id]: optMeta,
   [phMeta.id]: phMeta,
+  [fliptMeta.id]: fliptMeta,
 }
 
 const TRANSPORT_ICONS: Record<string, string> = {
