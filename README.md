@@ -6,7 +6,9 @@ Inspect and override feature flags in real-time. Any page, any environment.
 
 ## Install
 
-Chrome Web Store approval is pending. In the meantime, install directly from GitHub in under a minute:
+[Get it from the Chrome Web Store](https://chromewebstore.google.com/detail/featurepeep/faffnodddelcbhbcobdlanjeolebhbma).
+
+### From source
 
 1. [Download this repo as a ZIP](https://github.com/benbynum/feature-peep/archive/refs/heads/main.zip) and unzip it
 2. Open `chrome://extensions`
