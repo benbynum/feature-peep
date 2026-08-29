@@ -464,6 +464,8 @@ function openFeedbackView(): void {
   document.getElementById('feedback-submit-error')!.classList.add('hidden')
   ;(document.getElementById('feedback-textarea') as HTMLTextAreaElement).value = ''
   document.getElementById('feedback-char-count')!.textContent = '0 / 200'
+  ;(document.getElementById('feedback-email-input') as HTMLInputElement).value = ''
+  document.getElementById('feedback-email-error')!.classList.add('hidden')
 
   chrome.storage.local.get([STORAGE_LAST_FEEDBACK], result => {
     const last = result[STORAGE_LAST_FEEDBACK] as number | undefined
@@ -506,6 +508,10 @@ document.getElementById('feedback-captcha-input')!.addEventListener('keydown', e
 
 const feedbackTextarea = document.getElementById('feedback-textarea') as HTMLTextAreaElement
 const feedbackCharCount = document.getElementById('feedback-char-count')!
+const feedbackEmailInput = document.getElementById('feedback-email-input') as HTMLInputElement
+const feedbackEmailError = document.getElementById('feedback-email-error')!
+
+feedbackEmailInput.addEventListener('input', () => feedbackEmailError.classList.add('hidden'))
 
 feedbackTextarea.addEventListener('input', () => {
   const len = feedbackTextarea.value.length
@@ -535,6 +541,12 @@ function setFeedbackError(el: HTMLElement, status: number): void {
 document.getElementById('feedback-submit-btn')!.addEventListener('click', async () => {
   const msg = feedbackTextarea.value.trim()
   if (!msg) return
+  const email = feedbackEmailInput.value.trim()
+  if (email && !feedbackEmailInput.checkValidity()) {
+    feedbackEmailError.classList.remove('hidden')
+    feedbackEmailInput.focus()
+    return
+  }
   const btn = document.getElementById('feedback-submit-btn') as HTMLButtonElement
   btn.disabled = true
   btn.textContent = 'Sending…'
@@ -543,7 +555,9 @@ document.getElementById('feedback-submit-btn')!.addEventListener('click', async 
     const res = await fetch(FORMSPREE_ENDPOINT, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, _subject: '[FeaturePeep Feedback]' }),
+      // `email` is Formspree's recognized field name for setting the Reply-To header
+      // on the notification email — replying to it reaches the submitter directly.
+      body: JSON.stringify({ message: msg, _subject: '[FeaturePeep Feedback]', ...(email ? { email } : {}) }),
     })
     if (!res.ok) {
       setFeedbackError(errEl, res.status)

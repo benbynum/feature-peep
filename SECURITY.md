@@ -16,6 +16,10 @@ The practical impact is bounded: a script that can run on your page already has 
 
 `inject.js` wraps `window.fetch`, `window.XMLHttpRequest`, and `window.EventSource` at `document_start`. This is required to intercept SDK network traffic before the SDK initialises. The wrappers pass all requests through to the originals unchanged unless the URL matches a known feature flag provider pattern.
 
+### Feedback submission calls an external service
+
+The popup's "Submit feedback" form (`src/popup/index.ts`) is the one place the extension makes a network request of its own: it POSTs the message — and an email address, if the user chooses to provide one — to a fixed Formspree endpoint (`src/constants.ts`) so the maintainer can read and reply to it. This is opt-in and user-initiated; nothing is sent unless the user types a message and clicks Send.
+
 ## Extension permissions
 
 | Permission | Why it's needed |
@@ -25,3 +29,5 @@ The practical impact is bounded: a script that can run on your page already has 
 | `windows` | Detects window focus changes so the active-tab tracking stays accurate when switching windows. |
 
 The extension uses `"matches": ["<all_urls>"]` in its content scripts because feature flag SDKs can run on any site. It does not read page content, form data, or credentials — it only inspects URLs and JSON responses from known flag provider endpoints.
+
+`host_permissions` additionally includes `https://formspree.io/*`, scoped narrowly to the feedback form's POST endpoint described above.

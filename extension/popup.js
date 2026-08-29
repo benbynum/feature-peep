@@ -429,6 +429,8 @@
     document.getElementById("feedback-submit-error").classList.add("hidden");
     document.getElementById("feedback-textarea").value = "";
     document.getElementById("feedback-char-count").textContent = "0 / 200";
+    document.getElementById("feedback-email-input").value = "";
+    document.getElementById("feedback-email-error").classList.add("hidden");
     chrome.storage.local.get([STORAGE_LAST_FEEDBACK], (result) => {
       const last = result[STORAGE_LAST_FEEDBACK];
       const limited = last != null && Date.now() - last < FEEDBACK_COOLDOWN_MS;
@@ -464,6 +466,9 @@
   });
   var feedbackTextarea = document.getElementById("feedback-textarea");
   var feedbackCharCount = document.getElementById("feedback-char-count");
+  var feedbackEmailInput = document.getElementById("feedback-email-input");
+  var feedbackEmailError = document.getElementById("feedback-email-error");
+  feedbackEmailInput.addEventListener("input", () => feedbackEmailError.classList.add("hidden"));
   feedbackTextarea.addEventListener("input", () => {
     const len = feedbackTextarea.value.length;
     feedbackCharCount.textContent = `${len} / 200`;
@@ -490,6 +495,12 @@
   document.getElementById("feedback-submit-btn").addEventListener("click", async () => {
     const msg = feedbackTextarea.value.trim();
     if (!msg) return;
+    const email = feedbackEmailInput.value.trim();
+    if (email && !feedbackEmailInput.checkValidity()) {
+      feedbackEmailError.classList.remove("hidden");
+      feedbackEmailInput.focus();
+      return;
+    }
     const btn = document.getElementById("feedback-submit-btn");
     btn.disabled = true;
     btn.textContent = "Sending\u2026";
@@ -498,7 +509,9 @@
       const res = await fetch(FORMSPREE_ENDPOINT, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, _subject: "[FeaturePeep Feedback]" })
+        // `email` is Formspree's recognized field name for setting the Reply-To header
+        // on the notification email — replying to it reaches the submitter directly.
+        body: JSON.stringify({ message: msg, _subject: "[FeaturePeep Feedback]", ...email ? { email } : {} })
       });
       if (!res.ok) {
         setFeedbackError(errEl, res.status);

@@ -924,6 +924,27 @@ body.settings-open .settings-overlay {
 
 .feedback-textarea::placeholder { color: var(--text-hint); }
 
+.feedback-email-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-btn);
+  border-radius: 6px;
+  padding: 8px;
+  margin-top: 6px;
+  font-family: inherit;
+  font-size: 11px;
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.feedback-email-input:focus {
+  border-color: var(--logo-color);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.feedback-email-input::placeholder { color: var(--text-hint); }
+
 .feedback-compose-footer {
   display: flex;
   justify-content: space-between;

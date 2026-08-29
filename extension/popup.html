@@ -150,6 +150,8 @@
           </div>
           <div id="feedback-compose" class="feedback-form-section hidden">
             <textarea id="feedback-textarea" class="feedback-textarea" maxlength="200" rows="5" placeholder="A bug, feature request, or anything else..."></textarea>
+            <input id="feedback-email-input" class="feedback-email-input" type="email" placeholder="Email (optional, if you want a reply)" autocomplete="email" />
+            <span id="feedback-email-error" class="feedback-error hidden">That doesn't look like a valid email.</span>
             <div class="feedback-compose-footer">
               <span id="feedback-char-count" class="feedback-char-count">0 / 200</span>
               <div class="feedback-action-btns">
